@@ -1,0 +1,190 @@
+rm(list=ls())
+setwd("K:/Plant soil feedback/Students/Annelien/R")
+
+library(reshape2)
+library("QuantPsyc")
+library(ggplot2)
+library(lattice)
+source("C:/Users/dzandt/Documents/Courses/Zero Inflated models/AllRCode/HighstatLibV10.R") #pc
+source("C:/Users/Dina/Desktop/Zero Inflated models/AllData/HighstatLibV10.R") #laptop
+
+Data=read.table("Leafcounts_feedback.txt",h=T)
+head(Data)
+
+#Order dataframa
+Data<-Data[order(Data$Species, Data$Soil, Data$Nutrient, Data$Myc, Data$Rep),]
+Data
+
+#Make Datamin and Dataplus
+Datamin <- Data[ which (Data$Myc == "Min"),]
+Dataplus <- Data[ which (Data$Species=="Pl" | Data$Species=="Lh"),]
+
+#Calculate PSFleaf
+# (own-mix) / mix
+Minwk1 <- (Datamin$Leafs[Datamin$Soil=="Own" & Datamin$Week == 1]-Datamin$Leafs[Datamin$Soil=="Mix" & Datamin$Week == 1]) / Datamin$Leafs[Datamin$Soil=="Mix" & Datamin$Week == 1]
+Minwk2 <- (Datamin$Leafs[Datamin$Soil=="Own" & Datamin$Week == 2]-Datamin$Leafs[Datamin$Soil=="Mix" & Datamin$Week == 2]) / Datamin$Leafs[Datamin$Soil=="Mix" & Datamin$Week == 2]
+Minwk3 <- (Datamin$Leafs[Datamin$Soil=="Own" & Datamin$Week == 3]-Datamin$Leafs[Datamin$Soil=="Mix" & Datamin$Week == 3]) / Datamin$Leafs[Datamin$Soil=="Mix" & Datamin$Week == 3]
+Minwk4 <- (Datamin$Leafs[Datamin$Soil=="Own" & Datamin$Week == 4]-Datamin$Leafs[Datamin$Soil=="Mix" & Datamin$Week == 4]) / Datamin$Leafs[Datamin$Soil=="Mix" & Datamin$Week == 4]
+Minwk5 <- (Datamin$Leafs[Datamin$Soil=="Own" & Datamin$Week == 5]-Datamin$Leafs[Datamin$Soil=="Mix" & Datamin$Week == 5]) / Datamin$Leafs[Datamin$Soil=="Mix" & Datamin$Week == 5]
+Minwk6 <- (Datamin$Leafs[Datamin$Soil=="Own" & Datamin$Week == 6]-Datamin$Leafs[Datamin$Soil=="Mix" & Datamin$Week == 6]) / Datamin$Leafs[Datamin$Soil=="Mix" & Datamin$Week == 6]
+
+Pluswk1 <- (Dataplus$Leafs[Dataplus$Soil=="Own" & Dataplus$Week == 1]-Dataplus$Leafs[Dataplus$Soil=="Mix" & Dataplus$Week == 1]) / Dataplus$Leafs[Dataplus$Soil=="Mix" & Dataplus$Week == 1]
+Pluswk2 <- (Dataplus$Leafs[Dataplus$Soil=="Own" & Dataplus$Week == 2]-Dataplus$Leafs[Dataplus$Soil=="Mix" & Dataplus$Week == 2]) / Dataplus$Leafs[Dataplus$Soil=="Mix" & Dataplus$Week == 2]
+Pluswk3 <- (Dataplus$Leafs[Dataplus$Soil=="Own" & Dataplus$Week == 3]-Dataplus$Leafs[Dataplus$Soil=="Mix" & Dataplus$Week == 3]) / Dataplus$Leafs[Dataplus$Soil=="Mix" & Dataplus$Week == 3]
+Pluswk4 <- (Dataplus$Leafs[Dataplus$Soil=="Own" & Dataplus$Week == 4]-Dataplus$Leafs[Dataplus$Soil=="Mix" & Dataplus$Week == 4]) / Dataplus$Leafs[Dataplus$Soil=="Mix" & Dataplus$Week == 4]
+Pluswk5 <- (Dataplus$Leafs[Dataplus$Soil=="Own" & Dataplus$Week == 5]-Dataplus$Leafs[Dataplus$Soil=="Mix" & Dataplus$Week == 5]) / Dataplus$Leafs[Dataplus$Soil=="Mix" & Dataplus$Week == 5]
+Pluswk6 <- (Dataplus$Leafs[Dataplus$Soil=="Own" & Dataplus$Week == 6]-Dataplus$Leafs[Dataplus$Soil=="Mix" & Dataplus$Week == 6]) / Dataplus$Leafs[Dataplus$Soil=="Mix" & Dataplus$Week == 6]
+
+#Make dataframes
+PSFmin <- data.frame(Datamin$Species[Datamin$Soil=="Own" & Datamin$Week == 1], Datamin$Nutrient[Datamin$Soil=="Own" & Datamin$Week == 1], Datamin$Rep[Datamin$Soil=="Own" & Datamin$Week == 1], 
+                     Minwk1, Minwk2, Minwk3, Minwk4, Minwk5, Minwk6)
+colnames(PSFmin) <- c("Species", "Nutrient", "Rep", "1", "2", "3", "4", "5", "6")
+head(PSFmin)
+
+PSFmin <- melt(PSFmin, id=c("Species", "Nutrient", "Rep"))
+colnames(PSFmin) <- c("Species", "Nutrient", "Rep", "Week", "PSFleaf")
+head(PSFmin)
+
+PSFplus <- data.frame(Dataplus$Species[Dataplus$Soil=="Own" & Dataplus$Week == 1], Dataplus$Nutrient[Dataplus$Soil=="Own" & Dataplus$Week == 1], 
+                      Dataplus$Myc[Dataplus$Soil=="Own" & Dataplus$Week == 1], Dataplus$Rep[Dataplus$Soil=="Own" & Dataplus$Week == 1], 
+                      Pluswk1, Pluswk2, Pluswk3, Pluswk4, Pluswk5, Pluswk6)
+colnames(PSFplus) <- c("Species", "Nutrient", "Myc", "Rep", "1", "2", "3", "4", "5", "6")
+head(PSFplus)
+
+PSFplus <- melt(PSFplus, id=c("Species", "Nutrient", "Myc", "Rep"))
+colnames(PSFplus) <- c("Species", "Nutrient", "Myc", "Rep", "Week", "PSFleaf")
+head(PSFplus)
+
+#Change Inf into NA
+PSFmin$PSFleaf[PSFmin$PSFleaf == "Inf"] <- NA
+PSFplus$PSFleaf[PSFplus$PSFleaf == "Inf"] <- NA
+
+#Remove pots with just 3 plants
+PSFmin$PSFleaf[PSFmin$Species=="Fr" & PSFmin$Nutrient=="high" & PSFmin$Rep=="6"] <- NA
+PSFmin$PSFleaf[PSFmin$Species=="Lh" & PSFmin$Nutrient=="high" & PSFmin$Rep=="1"] <- NA
+PSFmin$PSFleaf[PSFmin$Species=="Lh" & PSFmin$Nutrient=="high" & PSFmin$Rep=="5"] <- NA
+
+PSFplus$PSFleaf[PSFplus$Species=="Lh" & PSFplus$Nutrient=="high" & PSFplus$Myc=="min" & PSFplus$Rep=="1"] <- NA
+PSFplus$PSFleaf[PSFplus$Species=="Lh" & PSFplus$Nutrient=="high" & PSFplus$Myc=="min" & PSFplus$Rep=="5"] <- NA
+
+
+#######################################PLOT LEAFS OVER TIME#######################################
+#Nutrients
+library(ggplot2)
+library(plyr)
+
+
+#Calculate mean and SE for plot
+Leafminmean <- ddply(Datamin, c("Species", "Nutrient", "Week", "Soil"), summarise,
+                    N    = sum(!is.na(Leafs)),
+                    mean = mean(Leafs, na.rm=TRUE),
+                    sd   = sd(Leafs, na.rm=TRUE),
+                    se   = sd / sqrt(N)
+)
+
+#Add species names
+Leafminmean$labels <- c("Anthoxanthum", "Anthoxanthum", "Festuca", "Festuca", "Leontodon", "Leontodon", "Plantago", "Plantago") 
+
+#PSFmin
+plot <- ggplot(data = Leafminmean, aes(y = mean, x = Week, group = Soil)) + 
+  facet_grid(Species ~ Nutrient) +
+  geom_point(data = Leafminmean, aes(y = mean, x = Week, colour=Soil)) +
+  geom_line(size=2, data = Leafminmean, aes(y = mean, x = Week, colour=Soil)) +
+  scale_colour_manual(values=c("#009E73", "#D55E00"), name=element_blank()) +
+  geom_errorbar(data=Leafminmean, aes(ymin = mean-se, ymax = mean+se), width=.4)+
+  geom_hline(yintercept = 0) +
+  #geom_text(data=PSFSmean, aes(label = paste(sig1), y=c(0.26, 0.26, 0.20, 0.20, 0.75, 0.75, -0.50, -0.50)), position = position_dodge(width = 0.9), hjust = -1.4, size=3.5)+
+  #geom_text(data=PSFSmean, aes(label = paste(sig2), y=c(0.26, 0.26, 0.20, 0.20, 0.73, 0.73, -0.50, -0.50)), position = position_dodge(width = 0.9), hjust = -0.8, size=5)+
+  theme_bw()+
+  theme(axis.text=element_text(size=11))+
+  theme(axis.title.x = element_blank())+
+  theme(axis.text.x=element_text(size=11))+
+  theme(axis.title.y=element_text(size=12, colour = "black",margin=(margin(0,10,0,0))))+
+  labs(y="Leafnumber")+
+  theme(legend.position= "none")+
+  theme(legend.text = element_text(size = 11))+
+  theme(legend.key.size = unit(0.4, "in"))+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  coord_cartesian(ylim = c(0, 5))+
+  theme(strip.text.x=element_text(size=11, face="bold"), strip.background=element_rect(fill="grey"))
+
+plot
+
+
+######################################FIGURES OVER TIME - PSF###################################################
+#Nutrients
+library(ggplot2)
+library(plyr)
+ggplot2
+
+#Calculate mean and SE for plot
+PSFminmean <- ddply(PSFmin, c("Species", "Nutrient", "Week"), summarise,
+                  N    = sum(!is.na(PSFleaf)),
+                  mean = mean(PSFleaf, na.rm=TRUE),
+                  sd   = sd(PSFleaf, na.rm=TRUE),
+                  se   = sd / sqrt(N)
+)
+
+#Add species names
+PSFSmean$labels <- c("Anthoxanthum", "Anthoxanthum", "Festuca", "Festuca", "Leontodon", "Leontodon", "Plantago", "Plantago") 
+
+#PSFmin
+plot <- ggplot(data = PSFminmean, aes(y = mean, x = Week, group = Nutrient)) + 
+  facet_wrap(~ Species, ncol=2) +
+  geom_point(data = PSFminmean, aes(y = mean, x = Week, colour=Nutrient)) +
+  geom_line(size=2, data = PSFminmean, aes(y = mean, x = Week, colour=Nutrient)) +
+  scale_colour_manual(values=c("#009E73", "#D55E00"), name=element_blank()) +
+  geom_errorbar(data=PSFminmean, aes(ymin = mean-se, ymax = mean+se), width=.4)+
+  geom_hline(yintercept = 0) +
+  theme_bw()+
+  theme(axis.text=element_text(size=11))+
+  theme(axis.title.x = element_blank())+
+  theme(axis.text.x=element_text(size=11))+
+  theme(axis.title.y=element_text(size=12, colour = "black",margin=(margin(0,10,0,0))))+
+  labs(y="Plant-soil feedback leaf")+
+  theme(legend.position= "none")+
+  theme(legend.text = element_text(size = 11))+
+  theme(legend.key.size = unit(0.4, "in"))+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  #coord_cartesian(ylim = c(-0.5, 0.75))+
+  theme(strip.text.x=element_text(size=11, face="bold"), strip.background=element_rect(fill="grey"))
+
+plot
+
+
+#Calculate mean and SE for plot
+PSFplusmean <- ddply(PSFplus, c("Species", "Nutrient", "Myc", "Week"), summarise,
+                    N    = sum(!is.na(PSFleaf)),
+                    mean = mean(PSFleaf, na.rm=TRUE),
+                    sd   = sd(PSFleaf, na.rm=TRUE),
+                    se   = sd / sqrt(N)
+)
+
+
+PSFplusmean$ID <- paste(PSFplusmean$Nutrient, PSFplusmean$Myc,
+                 sep = ".")
+PSFplusmean$ID <- factor(PSFplusmean$ID)
+PSFplusmean$ID
+
+#PSFplus
+plot <- ggplot(data = PSFplusmean, aes(y = mean, x = Week, group = ID)) + 
+  facet_wrap(~ Species, ncol=2) +
+  geom_point(data = PSFplusmean, aes(y = mean, x = Week, colour=ID)) +
+  geom_line(size=2, data = PSFplusmean, aes(y = mean, x = Week, colour=ID)) +
+  #scale_colour_manual(values=c("#009E73", "#D55E00"), name=element_blank()) +
+  geom_errorbar(data=PSFplusmean, aes(ymin = mean-se, ymax = mean+se), width=.4)+
+  geom_hline(yintercept = 0) +
+  theme_bw()+
+  theme(axis.text=element_text(size=11))+
+  theme(axis.title.x = element_blank())+
+  theme(axis.text.x=element_text(size=11))+
+  theme(axis.title.y=element_text(size=12, colour = "black",margin=(margin(0,10,0,0))))+
+  labs(y="Plant-soil feedback leaf")+
+  theme(legend.position= "none")+
+  theme(legend.text = element_text(size = 11))+
+  theme(legend.key.size = unit(0.4, "in"))+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  #coord_cartesian(ylim = c(-0.5, 0.75))+
+  theme(strip.text.x=element_text(size=11, face="bold"), strip.background=element_rect(fill="grey"))
+
+plot
