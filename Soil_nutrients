@@ -1,0 +1,707 @@
+rm(list=ls())
+setwd("E:/Plant soil feedback/Students/Annelien/R")
+
+library(reshape2)
+library("QuantPsyc")
+library(ggplot2)
+library(lattice)
+source("C:/Users/dzandt/Documents/Courses/Zero Inflated models/AllRCode/HighstatLibV10.R") #pc
+source("C:/Users/Dina/Desktop/Zero Inflated models/AllData/HighstatLibV10.R") #laptop
+
+Data=read.table("Nutrients_conditioning.txt",h=T)
+
+head(Data)
+
+#Data exploration
+# A. Missing values
+# B. Outliers
+# C. Collinearity
+# D. Relationships
+# E. Zero inflation
+
+# A. Missing values?
+colSums(is.na(Data)) #no missing values
+
+# B. Outliers
+MyVar <- c("NO3", "NH4", "PO4", "K")      
+Mydotplot(Data[, MyVar]) # perhaps, one, but not really
+
+#########################################################PLOTS CONDITIONING##################################################
+#Make plots per element
+library(ggplot2)
+library(plyr)
+library(multcomp)
+library(nlme)
+
+#Posthoc's for each element
+#Posthoc NO3
+vf <- varIdent(form = ~ 1|Soil)
+model <- gls(NO3 ~ Soil, data=Data)
+qqnorm(resid(model))
+plot(model) #mja
+emmeans(model, pairwise ~ Soil)
+
+#Posthoc NH4
+vf <- varIdent(form = ~ 1|Soil)
+model <- gls(NH4 ~ Soil, data=Data)
+qqnorm(resid(model))
+plot(model) #ok
+emmeans(model, pairwise ~ Soil)
+
+#Posthoc K
+vf <- varIdent(form = ~ 1|Soil)
+model <- gls(K ~ Soil, data=Data)
+qqnorm(resid(model))
+plot(model) #ok
+emmeans(model, pairwise ~ Soil)
+
+#Posthoc P
+vf <- varIdent(form = ~ 1|Soil)
+model <- gls(PO4 ~ Soil, data=Data)
+qqnorm(resid(model))
+plot(model) #ok
+emmeans(model, pairwise ~ Soil)
+
+#plots
+#NO3
+#Calculate mean and SE for plot
+NO3mean <- ddply(Data, c("Soil"), summarise,
+                     N    = length(NO3),
+                     mean = mean(NO3),
+                     sd   = sd(NO3),
+                     se   = sd / sqrt(N)
+  )
+
+NO3mean
+
+#reorder soils
+NO3mean$labels <- factor(c("Ao", "Fr", "Lh", "mix", "Pl"))
+NO3mean$labels <- factor(ordered(NO3mean$labels, levels = c("mix", "Ao", "Fr", "Lh", "Pl")))
+
+#Add significance
+NO3mean$sig <- c("b", "c", "c", "a", "b")
+
+#NO3
+plotNO3 <- ggplot(data = NO3mean, aes(y = NO3mean$mean, x = NO3mean$labels, fill=NO3mean$labels)) + 
+  geom_hline(yintercept = NO3mean$mean[NO3mean$Soil=="Mix"], colour = "#D55E00", size = 1, lty = "longdash") +
+  scale_fill_manual(values=c("#D55E00", "grey30", "grey30", "grey30", "grey30"), name=element_blank()) +
+  geom_bar(colour= "black",stat="identity", position=position_dodge()) +
+  geom_errorbar(data=NO3mean, aes(ymin = mean-se, ymax = mean+se), width=.4,position=position_dodge(.9))+
+  geom_text(data=NO3mean, aes(label = paste(sig), y=mean+se), position = position_dodge(width = 0.9), vjust = -1, size=4)+
+  theme_bw()+
+  theme(axis.text=element_text(size=11))+
+  theme(axis.title.x = element_blank())+
+  theme(axis.text.x=element_text(size=11))+
+  theme(axis.title.y=element_text(size=12, colour = "black",margin=(margin(0,10,0,0))))+
+  labs(y=expression(NO[3]^{"-"}~µmol %.% kg^{-1}))+
+  coord_cartesian(ylim=c(0, 6500)) +
+  theme(legend.position= "none")+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  theme(strip.text.x=element_text(size=11, face="bold"), strip.background=element_rect(fill="grey"))
+
+plotNO3 
+
+
+#NH4
+#Calculate mean and SE for plot
+NH4mean <- ddply(Data, c("Soil"), summarise,
+                 N    = length(NH4),
+                 mean = mean(NH4),
+                 sd   = sd(NH4),
+                 se   = sd / sqrt(N)
+)
+
+NH4mean
+
+#reorder soils
+NH4mean$labels <- factor(c("Ao", "Fr", "Lh", "mix", "Pl"))
+NH4mean$labels <- factor(ordered(NH4mean$labels, levels = c("mix", "Ao", "Fr", "Lh", "Pl")))
+
+#Add significance
+NH4mean$sig <- c("ab", "a", "a", "ab", "b")
+
+#NH4
+plotNH4 <- ggplot(data = NH4mean, aes(y = NH4mean$mean, x = NH4mean$labels, fill=NH4mean$labels)) + 
+  geom_hline(yintercept = NH4mean$mean[NH4mean$Soil=="Mix"], colour = "#D55E00", size = 1, lty = "longdash") +
+  scale_fill_manual(values=c("#D55E00", "grey30", "grey30", "grey30", "grey30"), name=element_blank()) +
+  geom_bar(colour= "black",stat="identity", position=position_dodge()) +
+  geom_errorbar(data=NH4mean, aes(ymin = mean-se, ymax = mean+se), width=.4,position=position_dodge(.9))+
+  geom_text(data=NH4mean, aes(label = paste(sig), y=mean+se), position = position_dodge(width = 0.9), vjust = -1, size=4)+
+  theme_bw()+
+  theme(axis.text=element_text(size=11))+
+  theme(axis.title.x = element_blank())+
+  theme(axis.text.x=element_text(size=11))+
+  theme(axis.title.y=element_text(size=12, colour = "black",margin=(margin(0,10,0,0))))+
+  labs(y=expression(NH[4]^{"+"}~µmol %.% kg^{-1}))+
+  coord_cartesian(ylim=c(0, 6500)) +
+  theme(legend.position= "none")+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  theme(strip.text.x=element_text(size=11, face="bold"), strip.background=element_rect(fill="grey"))
+
+plotNH4 
+
+
+#K
+#Calculate mean and SE for plot
+Kmean <- ddply(Data, c("Soil"), summarise,
+                 N    = length(K),
+                 mean = mean(K),
+                 sd   = sd(K),
+                 se   = sd / sqrt(N)
+)
+
+Kmean
+
+#reorder soils
+Kmean$labels <- factor(c("Ao", "Fr", "Lh", "mix", "Pl"))
+Kmean$labels <- factor(ordered(Kmean$labels, levels = c("mix", "Ao", "Fr", "Lh", "Pl")))
+
+#Add significance
+Kmean$sig <- c("a", "b", "a", "a", "a")
+
+#K
+plotK <- ggplot(data = Kmean, aes(y = Kmean$mean, x = Kmean$labels, fill=Kmean$labels)) + 
+  geom_hline(yintercept = Kmean$mean[Kmean$Soil=="Mix"], colour = "#D55E00", size = 1, lty = "longdash") +
+  scale_fill_manual(values=c("#D55E00", "grey30", "grey30", "grey30", "grey30"), name=element_blank()) +
+  geom_bar(colour= "black",stat="identity", position=position_dodge()) +
+  geom_errorbar(data=Kmean, aes(ymin = mean-se, ymax = mean+se), width=.4,position=position_dodge(.9))+
+  geom_text(data=Kmean, aes(label = paste(sig), y=mean+se), position = position_dodge(width = 0.9), vjust = -1, size=4)+
+  theme_bw()+
+  theme(axis.text=element_text(size=11))+
+  theme(axis.title.x = element_blank())+
+  theme(axis.text.x=element_text(size=11))+
+  theme(axis.title.y=element_text(size=12, colour = "black",margin=(margin(0,10,0,0))))+
+  labs(y=expression(K^{"+"}~µmol %.% kg^{-1}))+
+  coord_cartesian(ylim=c(0, 6500)) +
+  theme(legend.position= "none")+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  theme(strip.text.x=element_text(size=11, face="bold"), strip.background=element_rect(fill="grey"))
+
+plotK 
+
+#PO4
+#Calculate mean and SE for plot
+PO4mean <- ddply(Data, c("Soil"), summarise,
+               N    = length(PO4),
+               mean = mean(PO4),
+               sd   = sd(PO4),
+               se   = sd / sqrt(N)
+)
+
+PO4mean
+
+#reorder soils
+PO4mean$labels <- factor(c("Ao", "Fr", "Lh", "mix", "Pl"))
+PO4mean$labels <- factor(ordered(PO4mean$labels, levels = c("mix", "Ao", "Fr", "Lh", "Pl")))
+
+#Add significance
+PO4mean$sig <- c("a", "a", "a", "a", "a")
+
+#PO4
+plotPO4 <- ggplot(data = PO4mean, aes(y = PO4mean$mean, x = PO4mean$labels, fill=PO4mean$labels)) + 
+  geom_hline(yintercept = PO4mean$mean[PO4mean$Soil=="Mix"], colour = "#D55E00", size = 1, lty = "longdash") +
+  scale_fill_manual(values=c("#D55E00", "grey30", "grey30", "grey30", "grey30"), name=element_blank()) +
+  geom_bar(colour= "black",stat="identity", position=position_dodge()) +
+  geom_errorbar(data=PO4mean, aes(ymin = mean-se, ymax = mean+se), width=.4,position=position_dodge(.9))+
+  geom_text(data=PO4mean, aes(label = paste(sig), y=mean+se), position = position_dodge(width = 0.9), vjust = -1, size=4)+
+  theme_bw()+
+  theme(axis.text=element_text(size=11))+
+  theme(axis.title.x = element_blank())+
+  theme(axis.text.x=element_text(size=11))+
+  theme(axis.title.y=element_text(size=12, colour = "black",margin=(margin(0,10,0,0))))+
+  labs(y=expression(PO[4]^{"-"}~µmol %.% kg^{-1}))+
+  coord_cartesian(ylim=c(0, 6500)) +
+  theme(legend.position= "none")+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  theme(strip.text.x=element_text(size=11, face="bold"), strip.background=element_rect(fill="grey"))
+
+plotPO4 
+
+#Put together
+library(cowplot)
+
+plotNutrients_conditioning <- plot_grid(plotNO3, plotNH4, plotK, plotPO4, labels=c("A", "B", "C", "D"), ncol=2)
+plotNutrients_conditioning
+
+#save_plot("E:/Plant soil feedback/Students/Annelien/MS/Figures/Nutrients_conditioning.png", 
+          plotNutrients_conditioning, ncol=1, base_aspect_ratio = 1.5, dpi = 600)
+
+
+
+###########################################EXPERIMENTAL PHASE#############################################################
+Data2=read.table("THE MASTER SHEET.txt",h=T)
+Data2
+
+#Remove pots with only 3 plants
+#Fr own high min 6
+#Lh own high min 1
+#Lh own high min 5
+Data2<-Data2[which(Data2$Nplants==4),]
+
+#Data exploration
+# A. Missing values
+# B. Outliers
+# C. Collinearity
+# D. Relationships
+# E. Zero inflation
+
+# A. Missing values?
+colSums(is.na(Data2)) #no missing values for nutrients
+
+# B. Outliers
+MyVar <- c("NO3", "NH4", "K", "P")      
+Mydotplot(Data2[, MyVar]) # NO3 some possible outliers? Or just high because of species, nutrient addition combination?
+#NH4 depleted everywhere
+
+#Sort Data
+Data2<-Data2[order(Data2$Species, Data2$Soil, Data2$Nutrient, Data2$Myc, Data2$Rep),]
+
+#ID for species, soil, nutrient, myc
+Data2$ID <- paste(Data2$Soil, Data2$Nutrient,
+                 sep = ".")
+Data2$ID <- factor(Data2$ID)
+Data2$ID
+
+#subset for nutrient analysis only
+Datamin<-Data2[ which(Data2$Myc=="Min"),]
+Datamin
+str(Datamin)
+
+#subset for analysis with mycchorhizae
+Dataplus <- Data2[ which(Data2$Species == "Lh" | Data2$Species == "Pl"),]
+
+#Outliers in NO3 related to watercontent soil at moment of sampling?
+par(mfrow=c(1,1))
+plot(log(Data2$NO3) ~ Data2$Watercontent) #no direct correlation = GOOD
+
+#NO3 vs water
+formula = y ~ x
+ggplot(data = Datamin, aes(y = log(NO3), x = Watercontent, colour = ID)) + 
+  facet_wrap(~ Species, ncol=4) +
+  geom_point(stat="identity", size=5)+
+  geom_smooth(method="lm", formula=formula, se=FALSE, aes(colour=ID), size=1.2)
+
+#K vs water
+formula = y ~ x
+ggplot(data = Datamin, aes(y = K, x = Watercontent, colour = ID)) + 
+  facet_wrap(~ Species, ncol=4) +
+  geom_point(stat="identity", size=5)+
+  geom_smooth(method="lm", formula=formula, se=FALSE, aes(colour=ID), size=1.2)
+
+#P vs water
+formula = y ~ x
+ggplot(data = Datamin, aes(y = P, x = Watercontent, colour = ID)) + 
+  facet_wrap(~ Species, ncol=4) +
+  geom_point(stat="identity", size=5)+
+  geom_smooth(method="lm", formula=formula, se=FALSE, aes(colour=ID), size=1.2)
+
+#Shoot vs water
+formula = y ~ x
+ggplot(data = Datamin, aes(y = Shoot, x = Watercontent, colour = ID)) + 
+  facet_wrap(~ Species, ncol=4) +
+  geom_point(stat="identity", size=5)+
+  geom_smooth(method="lm", formula=formula, se=FALSE, aes(colour=ID), size=1.2)
+
+#Root vs water
+formula = y ~ x
+ggplot(data = Datamin, aes(y = Root, x = Watercontent, colour = ID)) + 
+  facet_wrap(~ Species, ncol=4) +
+  geom_point(stat="identity", size=5)+
+  geom_smooth(method="lm", formula=formula, se=FALSE, aes(colour=ID), size=1.2)
+
+#Shoot vs NO3
+formula = y ~ x
+ggplot(data = Datamin, aes(y = log(NO3), x = Shoot, colour = ID)) + 
+  facet_wrap(~ Species, ncol=4) +
+  geom_point(stat="identity", size=5)+
+  geom_smooth(method="lm", formula=formula, se=FALSE, aes(colour=ID), size=1.2)
+
+
+##################################################PLOTS DATAMIN EXPERIMENTAL PHASE#######################################
+#Posthoc
+library(emmeans)
+library(nlme)
+library(car)
+
+#NO3
+vf <- varIdent(form = ~ 1|Species)
+model <- gls(log(NO3) ~ Species * Nutrient * Soil, data=Datamin, weights=vf)
+Anova(model, type=3)
+qqnorm(resid(model))#mmm, log better
+plot(model) #vf species ok
+emmeans(model, pairwise ~ Nutrient * Soil | Species)
+
+#K
+vf <- varIdent(form = ~ 1|Species)
+model <- gls(K ~ Species * Nutrient * Soil, data=Datamin, weights=vf)
+Anova(model, type=3)
+qqnorm(resid(model))#perfect
+plot(model) #vf species ok
+emmeans(model, pairwise ~ Nutrient * Soil | Species)
+
+#P
+vf <- varIdent(form = ~ 1|Species)
+model <- gls(P ~ Species * Nutrient * Soil, data=Datamin)
+qqnorm(resid(model))#perfect
+plot(model) #vf species ok
+emmeans(model, pairwise ~ Nutrient * Soil | Species)
+
+
+#NO3
+#Calculate mean and SE for plot
+NO3expmean <- ddply(Datamin, c("Species", "Soil", "Nutrient"), summarise,
+                   N    = length(NO3),
+                   mean = mean(NO3),
+                   sd   = sd(NO3),
+                   se   = sd / sqrt(N)
+)
+
+NO3expmean
+
+#reorder nutrients
+NO3expmean$Soil <- factor(NO3expmean$Soil, levels = unique(rev(NO3expmean[,2])))
+NO3expmean$Nutrient <- factor(NO3expmean$Nutrient, levels = unique(rev(NO3expmean[,3])))
+
+#Add species as labels
+#Add species names
+NO3expmean$labels <- c("Anthoxanthum", "Anthoxanthum", "Anthoxanthum", "Anthoxanthum",
+                      "Festuca", "Festuca", "Festuca", "Festuca", 
+                      "Leontodon", "Leontodon", "Leontodon", "Leontodon",
+                      "Plantago", "Plantago", "Plantago", "Plantago")
+NO3expmean$sig <- c("a", "a", "a", "a", "b", "a", "b", "ab", "a", "a", "a", "a", "a","a","a", "a")
+
+#NO3
+plotA <- ggplot(data = NO3expmean, aes(y = NO3expmean$mean, x = NO3expmean$Soil, fill = NO3expmean$Nutrient)) + 
+  facet_wrap(~ labels, ncol=4) +
+  scale_fill_manual(values=c("#D55E00", "#009E73"), name=element_blank(), breaks = c("low", "high"), labels = c("low nutrients", "high nutrients")) +
+  geom_bar(colour= "black",stat="identity", position=position_dodge()) +
+  geom_errorbar(data=NO3expmean, aes(ymin = mean-se, ymax = mean+se), width=.4,position=position_dodge(.9))+
+  geom_text(data=NO3expmean, aes(label = paste(sig), y=mean+se), position = position_dodge(width = 0.9), vjust = -0.5, size=4)+
+  theme_bw()+
+  theme(axis.text=element_text(size=11))+
+  theme(axis.title.x = element_blank())+
+  theme(axis.text.x=element_text(size=11))+
+  theme(axis.title.y=element_text(size=11, colour = "black",margin=(margin(0,10,0,0))))+
+  labs(y=expression(NO[3]^{"-"}~µmol %.% kg^{-1}))+
+  coord_cartesian(ylim=c(0, 3000)) +
+  theme(legend.position= c(0.87,0.83))+
+  theme(legend.text = element_text(size = 9))+
+  theme(legend.key.size = unit(0.15, "in"))+  
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  theme(legend.background = element_blank())+
+  theme(strip.text.x=element_text(size=11, face="bold"), strip.background=element_rect(fill="grey"))
+
+plotA
+
+#K
+#Calculate mean and SE for plot
+Kexpmean <- ddply(Datamin, c("Species", "Soil", "Nutrient"), summarise,
+                    N    = length(K),
+                    mean = mean(K),
+                    sd   = sd(K),
+                    se   = sd / sqrt(N)
+)
+
+Kexpmean
+
+#reorder nutrients
+Kexpmean$Soil <- factor(Kexpmean$Soil, levels = unique(rev(Kexpmean[,2])))
+Kexpmean$Nutrient <- factor(Kexpmean$Nutrient, levels = unique(rev(Kexpmean[,3])))
+
+#Add species as labels
+#Add species names
+Kexpmean$labels <- c("Anthoxanthum", "Anthoxanthum", "Anthoxanthum", "Anthoxanthum",
+                       "Festuca", "Festuca", "Festuca", "Festuca", 
+                       "Leontodon", "Leontodon", "Leontodon", "Leontodon",
+                       "Plantago", "Plantago", "Plantago", "Plantago")
+Kexpmean$sig <- c("a", "a", "a", "a", "a", "a", "a", "a", "a", "b", "a", "a", "b", "a", "b", "a")
+
+#K
+plotB <- ggplot(data = Kexpmean, aes(y = Kexpmean$mean, x = Kexpmean$Soil, fill = Kexpmean$Nutrient)) + 
+  facet_wrap(~ labels, ncol=4) +
+  scale_fill_manual(values=c("#D55E00", "#009E73"), name=element_blank(), breaks = c("low", "high"), labels = c("low nutrients", "high nutrients")) +
+  geom_bar(colour= "black",stat="identity", position=position_dodge()) +
+  geom_errorbar(data=Kexpmean, aes(ymin = mean-se, ymax = mean+se), width=.4,position=position_dodge(.9))+
+  geom_text(data=Kexpmean, aes(label = paste(sig), y=mean+se), position = position_dodge(width = 0.9), vjust = -0.5, size=4)+
+  theme_bw()+
+  theme(axis.text=element_text(size=11))+
+  theme(axis.title.x = element_blank())+
+  theme(axis.text.x=element_text(size=11))+
+  theme(axis.title.y=element_text(size=11, colour = "black",margin=(margin(0,10,0,0))))+
+  labs(y=expression(K^{"+"}~µmol %.% kg^{-1}))+
+  coord_cartesian(ylim=c(0, 3000)) +
+  theme(legend.position= "none")+
+  theme(legend.text = element_text(size = 10))+
+  theme(legend.key.size = unit(0.15, "in"))+  
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  theme(legend.background = element_blank())+
+  theme(strip.text.x=element_text(size=11, face="bold"), strip.background=element_rect(fill="grey"))
+
+plotB
+
+#P
+#Calculate mean and SE for plot
+Pexpmean <- ddply(Datamin, c("Species", "Soil", "Nutrient"), summarise,
+                    N    = length(P),
+                    mean = mean(P),
+                    sd   = sd(P),
+                    se   = sd / sqrt(N)
+)
+
+Pexpmean
+
+#reorder nutrients
+Pexpmean$Soil <- factor(Pexpmean$Soil, levels = unique(rev(Pexpmean[,2])))
+Pexpmean$Nutrient <- factor(Pexpmean$Nutrient, levels = unique(rev(Pexpmean[,3])))
+
+#Add species as labels
+#Add species names
+Pexpmean$labels <- c("Anthoxanthum", "Anthoxanthum", "Anthoxanthum", "Anthoxanthum",
+                       "Festuca", "Festuca", "Festuca", "Festuca", 
+                       "Leontodon", "Leontodon", "Leontodon", "Leontodon",
+                       "Plantago", "Plantago", "Plantago", "Plantago")
+Pexpmean$sig <- c("b", "ab", "ab", "a(b)", "a", "a", "a", "a", "a", "a", "a", "a", "bc", "ab", "b", "a(c)")
+
+#P
+plotC <- ggplot(data = Pexpmean, aes(y = Pexpmean$mean, x = Pexpmean$Soil, fill = Pexpmean$Nutrient)) + 
+  facet_wrap(~ labels, ncol=4) +
+  scale_fill_manual(values=c("#D55E00", "#009E73"), name=element_blank(), breaks = c("low", "high"), labels = c("low nutrients", "high nutrients")) +
+  geom_bar(colour= "black",stat="identity", position=position_dodge()) +
+  geom_errorbar(data=Pexpmean, aes(ymin = mean-se, ymax = mean+se), width=.4,position=position_dodge(.9))+
+  geom_text(data=Pexpmean, aes(label = paste(sig), y=mean+se), position = position_dodge(width = 0.9), vjust = -0.5, size=4)+
+  theme_bw()+
+  theme(axis.text=element_text(size=11))+
+  theme(axis.title.x = element_blank())+
+  theme(axis.text.x=element_text(size=11))+
+  theme(axis.title.y=element_text(size=11, colour = "black",margin=(margin(0,10,0,0))))+
+  labs(y=expression(PO[4]^{"-"}~µmol %.% kg^{-1}))+
+  coord_cartesian(ylim=c(0, 3000)) +
+  theme(legend.position= "none")+
+  theme(legend.text = element_text(size = 10))+
+  theme(legend.key.size = unit(0.15, "in"))+  
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  theme(legend.background = element_blank())+
+  theme(strip.text.x=element_text(size=11, face="bold"), strip.background=element_rect(fill="grey"))
+
+plotC
+
+#Place together with cowplot
+library(cowplot)
+
+plotNutrients_experimental_withoutmyc <- plot_grid(plotA, plotB, plotC, labels=c("A", "B", "C", "D"), ncol=1)
+plotNutrients_experimental_withoutmyc
+
+#save_plot("E:/Plant soil feedback/Students/Annelien/MS/Figures/Nutrients_experimental_withoutmyc.png", 
+          plotNutrients_experimental_withoutmyc, ncol=1, base_aspect_ratio = 1.5, dpi = 600)
+
+##################################################PLOTS DATAPLUS EXPERIMENTAL PHASE#######################################
+head(Dataplus)
+library(plyr)
+library(nlme)
+
+#ID for species, soil, nutrient, myc
+Dataplus$ID2 <- paste(Dataplus$Soil, Dataplus$Nutrient,Dataplus$Myc,
+                  sep = ".")
+Dataplus$ID2 <- factor(Dataplus$ID2)
+Dataplus$ID2
+
+#Posthoc per species
+#Subs
+Lh <- Dataplus[which (Dataplus$Species=="Lh"),]
+Pl <- Dataplus[which (Dataplus$Species=="Pl"),]
+
+#NO3
+vf <- varIdent(form= ~ 1|Soil)
+model <- gls(log(NO3) ~ Nutrient * Soil * Myc, data=Lh, weights=vf)
+Anova(model, type=3)
+qqnorm(resid(model))
+plot(model) #mmm
+emmeans(model, pairwise ~ Soil * Myc | Nutrient)
+
+vf <- varIdent(form= ~ 1|Soil)
+model <- gls(NO3 ~ Nutrient * Soil * Myc, data=Pl)
+Anova(model, type=3)
+qqnorm(resid(model))
+plot(model) #mmm
+emmeans(model, pairwise ~ Soil * Myc | Nutrient)
+
+#K
+vf <- varIdent(form= ~ 1|Soil * Nutrient)
+model <- gls(K ~ Nutrient * Soil * Myc, data=Lh, weights=vf)
+Anova(model, type=3)
+qqnorm(resid(model))
+plot(model) #mmm
+emmeans(model, pairwise ~ Soil * Myc | Nutrient)
+
+vf <- varIdent(form= ~ 1|Soil)
+model <- gls(K ~ Nutrient * Soil * Myc, data=Pl)
+Anova(model, type=3)
+qqnorm(resid(model))
+plot(model) #mmm
+emmeans(model, pairwise ~ Soil * Myc | Nutrient)
+
+#PO4
+vf <- varIdent(form= ~ 1|Nutrient * Soil)
+model <- gls(P ~ Nutrient * Soil * Myc, data=Lh, weights=vf)
+Anova(model, type=3)
+qqnorm(resid(model))
+plot(model) #mmm
+emmeans(model, pairwise ~ Soil * Myc | Nutrient)
+
+vf <- varIdent(form= ~ 1|Soil)
+model <- gls(P ~ Nutrient * Soil * Myc, data=Pl)
+Anova(model, type=3)
+qqnorm(resid(model))
+plot(model) #mmm
+emmeans(model, pairwise ~ Soil * Myc | Nutrient)
+
+
+#NO3
+#Calculate mean and SE for plot
+NO3expmycmean <- ddply(Dataplus, c("Species", "Soil", "Nutrient", "Myc"), summarise,
+                    N    = length(NO3),
+                    mean = mean(NO3),
+                    sd   = sd(NO3),
+                    se   = sd / sqrt(N)
+)
+
+NO3expmycmean
+
+#reorder nutrients
+NO3expmycmean$Soil <- factor(NO3expmycmean$Soil, levels = unique(rev(NO3expmycmean[,2])))
+NO3expmycmean$Nutrient <- factor(NO3expmycmean$Nutrient, levels = unique(rev(NO3expmycmean[,3])))
+
+#Add species as labels
+#Add species names
+NO3expmycmean$labels <- c("Leontodon - high", "Leontodon - high", "Leontodon - low", "Leontodon - low",
+                          "Leontodon - high", "Leontodon - high", "Leontodon - low", "Leontodon - low",
+                       "Plantago - high", "Plantago - high", "Plantago - low", "Plantago - low", 
+                       "Plantago - high", "Plantago - high", "Plantago - low", "Plantago - low")
+NO3expmycmean$labels <- factor(NO3expmycmean$labels, levels = c("Leontodon - low", "Leontodon - high", "Plantago - low", "Plantago - high"))
+NO3expmycmean$sig <- c("a", "ab", "ab", "ab", "a", "b", "a", "b", "a", "b", "bc", "c", "ab", "a", "a(b)", "a")
+
+#NO3
+plotA <- ggplot(data = NO3expmycmean, aes(y = mean, x = Soil, fill = Myc)) + 
+  facet_wrap(~ labels, ncol=4) +
+  scale_fill_manual(values=c("#E69F00", "#0072B2"), name=element_blank(), breaks = c("Min", "Plus"), labels = c("No AMF added", "AMF added")) +
+  geom_bar(colour= "black",stat="identity", position=position_dodge()) +
+  geom_errorbar(data=NO3expmycmean, aes(ymin = mean-se, ymax = mean+se), width=.4,position=position_dodge(.9))+
+  geom_text(data=NO3expmycmean, aes(label = paste(sig), y=mean+se), position = position_dodge(width = 0.9), vjust = -0.5, size=4)+
+  theme_bw()+
+  theme(axis.text=element_text(size=11))+
+  theme(axis.title.x = element_blank())+
+  theme(axis.text.x=element_text(size=11))+
+  theme(axis.title.y=element_text(size=11, colour = "black",margin=(margin(0,10,0,0))))+
+  labs(y=expression(NO[3]^{"-"}~µmol %.% kg^{-1}))+
+  coord_cartesian(ylim=c(0, 1000)) +
+  theme(legend.position= c(0.87,0.83))+
+  theme(legend.text = element_text(size = 9))+
+  theme(legend.key.size = unit(0.15, "in"))+  
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  theme(legend.background = element_blank())+
+  theme(strip.text.x=element_text(size=9, face="bold"), strip.background=element_rect(fill="grey"))
+
+plotA
+
+#K
+#Calculate mean and SE for plot
+Kexpmycmean <- ddply(Dataplus, c("Species", "Soil", "Nutrient", "Myc"), summarise,
+                       N    = length(K),
+                       mean = mean(K),
+                       sd   = sd(K),
+                       se   = sd / sqrt(N)
+)
+
+Kexpmycmean
+
+#reorder nutrients
+Kexpmycmean$Soil <- factor(Kexpmycmean$Soil, levels = unique(rev(Kexpmycmean[,2])))
+Kexpmycmean$Nutrient <- factor(Kexpmycmean$Nutrient, levels = unique(rev(Kexpmycmean[,3])))
+
+#Add species as labels
+#Add species names
+Kexpmycmean$labels <- c("Leontodon - high", "Leontodon - high", "Leontodon - low", "Leontodon - low",
+                          "Leontodon - high", "Leontodon - high", "Leontodon - low", "Leontodon - low",
+                          "Plantago - high", "Plantago - high", "Plantago - low", "Plantago - low", 
+                          "Plantago - high", "Plantago - high", "Plantago - low", "Plantago - low")
+Kexpmycmean$labels <- factor(Kexpmycmean$labels, levels = c("Leontodon - low", "Leontodon - high", "Plantago - low", "Plantago - high"))
+Kexpmycmean$sig <- c("a", "a", "bc", "c", "a", "a", "a", "b", "a", "a", "a", "a", "a", "a", "a", "a")
+
+#K
+plotB <- ggplot(data = Kexpmycmean, aes(y = mean, x = Soil, fill = Myc)) + 
+  facet_wrap(~ labels, ncol=4) +
+  scale_fill_manual(values=c("#E69F00", "#0072B2"), name=element_blank(), breaks = c("Min", "Plus"), labels = c("No AMF added", "AMF added")) +
+  geom_bar(colour= "black",stat="identity", position=position_dodge()) +
+  geom_errorbar(data=Kexpmycmean, aes(ymin = mean-se, ymax = mean+se), width=.4,position=position_dodge(.9))+
+  geom_text(data=Kexpmycmean, aes(label = paste(sig), y=mean+se), position = position_dodge(width = 0.9), vjust = -0.5, size=4)+
+  theme_bw()+
+  theme(axis.text=element_text(size=11))+
+  theme(axis.title.x = element_blank())+
+  theme(axis.text.x=element_text(size=11))+
+  theme(axis.title.y=element_text(size=11, colour = "black",margin=(margin(0,10,0,0))))+
+  labs(y=expression(K^{"+"}~µmol %.% kg^{-1}))+
+  coord_cartesian(ylim=c(0, 2000)) +
+  theme(legend.position= "none")+
+  theme(legend.text = element_text(size = 9))+
+  theme(legend.key.size = unit(0.15, "in"))+  
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  theme(legend.background = element_blank())+
+  theme(strip.text.x=element_text(size=9, face="bold"), strip.background=element_rect(fill="grey"))
+
+plotB
+
+#P
+#Calculate mean and SE for plot
+Pexpmycmean <- ddply(Dataplus, c("Species", "Soil", "Nutrient", "Myc"), summarise,
+                       N    = length(P),
+                       mean = mean(P),
+                       sd   = sd(P),
+                       se   = sd / sqrt(N)
+)
+
+Pexpmycmean
+
+#reorder nutrients
+Pexpmycmean$Soil <- factor(Pexpmycmean$Soil, levels = unique(rev(Pexpmycmean[,2])))
+Pexpmycmean$Nutrient <- factor(Pexpmycmean$Nutrient, levels = unique(rev(Pexpmycmean[,3])))
+
+#Add species as labels
+#Add species names
+Pexpmycmean$labels <- c("Leontodon - high", "Leontodon - high", "Leontodon - low", "Leontodon - low",
+                          "Leontodon - high", "Leontodon - high", "Leontodon - low", "Leontodon - low",
+                          "Plantago - high", "Plantago - high", "Plantago - low", "Plantago - low", 
+                          "Plantago - high", "Plantago - high", "Plantago - low", "Plantago - low")
+Pexpmycmean$labels <- factor(Pexpmycmean$labels, levels = c("Leontodon - low", "Leontodon - high", "Plantago - low", "Plantago - high"))
+Pexpmycmean$sig <- c("a", "a", "ab", "b", "a", "a", "ab", "a(b)", "a", "c", "bc", "c", "ac", "b", "a(c)", "b")
+
+#P
+plotC <- ggplot(data = Pexpmycmean, aes(y = mean, x = Soil, fill = Myc)) + 
+  facet_wrap(~ labels, ncol=4) +
+  scale_fill_manual(values=c("#E69F00", "#0072B2"), name=element_blank(), breaks = c("Min", "Plus"), labels = c("No AMF added", "AMF added")) +
+  geom_bar(colour= "black",stat="identity", position=position_dodge()) +
+  geom_errorbar(data=Pexpmycmean, aes(ymin = mean-se, ymax = mean+se), width=.4,position=position_dodge(.9))+
+  geom_text(data=Pexpmycmean, aes(label = paste(sig), y=mean+se), position = position_dodge(width = 0.9), vjust = -0.5, size=4)+
+  theme_bw()+
+  theme(axis.text=element_text(size=11))+
+  theme(axis.title.x = element_blank())+
+  theme(axis.text.x=element_text(size=11))+
+  theme(axis.title.y=element_text(size=11, colour = "black",margin=(margin(0,10,0,0))))+
+  labs(y=expression(PO[4]^{"-"}~µmol %.% kg^{-1}))+
+  coord_cartesian(ylim=c(0, 2000)) +
+  theme(legend.position= "none")+
+  theme(legend.text = element_text(size = 9))+
+  theme(legend.key.size = unit(0.15, "in"))+  
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  theme(legend.background = element_blank())+
+  theme(strip.text.x=element_text(size=9, face="bold"), strip.background=element_rect(fill="grey"))
+
+plotC
+
+#Place together with cowplot
+library(cowplot)
+
+plotNutrients_experimental_withmyc <- plot_grid(plotA, plotB, plotC, labels=c("A", "B", "C"), ncol=1)
+plotNutrients_experimental_withmyc
+
+#save_plot("E:/Plant soil feedback/Students/Annelien/MS/Figures/Nutrients_experimental_withmyc.png", 
+          plotNutrients_experimental_withmyc, ncol=1, base_aspect_ratio = 1.5, dpi = 600)
