@@ -1,0 +1,2466 @@
+rm(list=ls())
+setwd("K:/Plant soil feedback/Students/Annelien/R")
+
+library(reshape2)
+library("QuantPsyc")
+library(ggplot2)
+library(lattice)
+source("C:/Users/dzandt/Documents/Courses/Zero Inflated models/AllRCode/HighstatLibV10.R") #pc
+source("C:/Users/Dina/Desktop/Zero Inflated models/AllData/HighstatLibV10.R") #laptop
+
+Data=read.table("THE MASTER SHEET.txt",h=T)
+
+head(Data)
+
+#Devide root biomass by 4
+Data$Root <- Data$Root/Data$Nplants
+
+#Calculate total biomass
+Data$Total<-Data$Shoot + Data$Root
+
+#Calculate root:shoot ratio
+Data$Ratio<-Data$Root/Data$Shoot
+
+#Data exploration
+# A. Missing values
+# B. Outliers
+# C. Collinearity
+# D. Relationships
+# E. Zero inflation
+
+# A. Missing values?
+colSums(is.na(Data)) #no missing values, except for mychorrhizae counting, but that's correct
+
+# B. Outliers
+MyVar <- c("Root", "Shoot")      
+Mydotplot(Data[, MyVar]) # looks good, no real outliers
+
+#Sort Data
+Data<-Data[order(Data$Species, Data$Soil, Data$Nutrient, Data$Myc, Data$Rep),]
+
+#ID for species, soil, nutrient, myc
+Data$ID <- paste(Data$Soil, Data$Nutrient,
+                 sep = ".")
+Data$ID <- factor(Data$ID)
+Data$ID
+
+#Make factor of tablehalf and block
+Data$fTablehalf<-as.factor(Data$Tablehalf)
+Data$fBlock<-as.factor(Data$Block)
+
+#subset for nutrient analysis only
+Datamin<-Data[ which(Data$Myc=="Min"),]
+Datamin
+str(Datamin)
+
+# Visualize
+p <- ggplot()
+p <- p + geom_boxplot(data = Datamin, 
+                      aes(y = Shoot, 
+                          x = ID))                 
+p <- p + ylab("Shoot")
+p <- p + theme(text = element_text(size=15)) 
+p <- p + facet_wrap(~ Species, scales = "fixed")
+p
+#Nutrients are beneficial for shoot growth
+
+# Visualize
+p <- ggplot()
+p <- p + geom_boxplot(data = Datamin, 
+                      aes(y = Root, 
+                          x = ID))                 
+p <- p + ylab("Root")
+p <- p + theme(text = element_text(size=15)) 
+p <- p + facet_wrap(~ Species, scales = "fixed")
+p
+#Nutrient effect less clear here
+
+plot(Root~Shoot, data=Datamin)
+
+# Visualize
+p <- ggplot()
+p <- p + geom_boxplot(data = Datamin, 
+                      aes(y = Total, 
+                          x = ID))                 
+p <- p + ylab("Total")
+p <- p + theme(text = element_text(size=15)) 
+p <- p + facet_wrap(~ Species, scales = "fixed")
+p
+#For Lh and Pl clear nutrient effect, but Ao and Fr less
+
+# Visualize
+p <- ggplot()
+p <- p + geom_boxplot(data = Datamin, 
+                      aes(y = Ratio, 
+                          x = ID))                 
+p <- p + ylab("RootShootRatio")
+p <- p + theme(text = element_text(size=15)) 
+p <- p + facet_wrap(~ Species, scales = "fixed")
+p
+#Clear responses to nutrients, decrease in ratio with high nutrients = less roots --> makes sense
+
+#################################PLOTS WITH RAW BIOMASS################################
+library(ggplot2)
+library(plyr)
+library(multcomp)
+library(emmeans)
+library(nlme)
+
+Datamin$ID[Datamin$Nplants==3]
+Datamin$Species[Datamin$Nplants==3]
+Datamin[40:91,]
+
+Datamin2<- Datamin[which (Datamin$Nplants==4),]
+head(Datamin2)
+
+#Stats shoot
+vf <- varIdent(form = ~ 1|Species)
+model <- gls(Shoot ~ Soil * Nutrient * Species, data=Datamin2) #same with and without weights
+qqnorm(resid(model)) #alright
+plot(model) #mjah
+emmeans(model, pairwise ~ Soil * Nutrient | Species)
+
+#Stats root
+vf <- varIdent(form = ~ 1|Species)
+model <- gls(Root ~ Soil * Nutrient * Species, data=Datamin2) #no reason to use weights
+qqnorm(resid(model)) #alright
+plot(model) #mjah
+emmeans(model, pairwise ~ Soil * Nutrient | Species)
+
+#Calculate mean and SE for plot
+Shootmean <- ddply(Datamin2, c("Species", "Soil", "Nutrient"), summarise,
+                  N    = length(Shoot),
+                  mean = mean(Shoot),
+                  sd   = sd(Shoot),
+                  se   = sd / sqrt(N)
+)
+
+Shootmean
+
+#reorder nutrients
+Shootmean$Soil <- factor(Shootmean$Soil, levels = unique(rev(Shootmean[,2])))
+Shootmean$Nutrient <- factor(Shootmean$Nutrient, levels = unique(rev(Shootmean[,3])))
+
+#Add species as labels
+#Add species names
+Shootmean$labels <- c("Anthoxanthum", "Anthoxanthum", "Anthoxanthum", "Anthoxanthum",
+                      "Festuca", "Festuca", "Festuca", "Festuca", 
+                      "Leontodon", "Leontodon", "Leontodon", "Leontodon",
+                      "Plantago", "Plantago", "Plantago", "Plantago")
+Shootmean$sig <- c("b", "a", "b", "a", "b", "a", "b", "a", "b", "c", "b", "a", "b", "c", "b", "a")
+
+#Shoot
+plotA <- ggplot(data = Shootmean, aes(y = Shootmean$mean, x = Shootmean$Soil, fill = Shootmean$Nutrient)) + 
+  facet_wrap(~ labels, ncol=4) +
+  scale_fill_manual(values=c("#D55E00", "#009E73"), name=element_blank(), breaks = c("low", "high"), labels = c("low nutrients", "high nutrients")) +
+  geom_bar(colour= "black",stat="identity", position=position_dodge()) +
+  geom_errorbar(data=Shootmean, aes(ymin = mean-se, ymax = mean+se), width=.4,position=position_dodge(.9))+
+  geom_text(data=Shootmean, aes(label = paste(sig), y=mean+se), position = position_dodge(width = 0.9), vjust = -1, size=4)+
+  theme_bw()+
+  theme(axis.text=element_text(size=11))+
+  theme(axis.title.x = element_blank())+
+  theme(axis.text.x=element_text(size=11))+
+  theme(axis.title.y=element_text(size=12, colour = "black",margin=(margin(0,10,0,0))))+
+  labs(y="Dry weight shoot (g)")+
+  coord_cartesian(ylim=c(0, 2.3)) +
+  theme(legend.position= c(0.12,0.85))+
+  theme(legend.text = element_text(size = 10))+
+  theme(legend.key.size = unit(0.15, "in"))+  
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  theme(legend.background = element_blank())+
+  theme(strip.text.x=element_text(size=11, face="bold"), strip.background=element_rect(fill="grey"))
+
+plotA
+
+
+#Calculate mean and SE for plot
+Rootmean <- ddply(Datamin2, c("Species", "Soil", "Nutrient"), summarise,
+                   N    = length(Root),
+                   mean = mean(Root),
+                   sd   = sd(Root),
+                   se   = sd / sqrt(N)
+)
+
+Rootmean
+
+#reorder nutrients
+Rootmean$Soil <- factor(Rootmean$Soil, levels = unique(rev(Rootmean[,2])))
+Rootmean$Nutrient <- factor(Rootmean$Nutrient, levels = unique(rev(Rootmean[,3])))
+
+#Add species as labels
+#Add species names
+Rootmean$labels <- c("Anthoxanthum", "Anthoxanthum", "Anthoxanthum", "Anthoxanthum",
+                      "Festuca", "Festuca", "Festuca", "Festuca", 
+                      "Leontodon", "Leontodon", "Leontodon", "Leontodon",
+                      "Plantago", "Plantago", "Plantago", "Plantago")
+Rootmean$sig <- c("a", "a", "a", "a", "a", "a", "a", "a", "b", "a", "ab", "ab", "b", "a", "ab", "a")
+
+#Root
+plotB <- ggplot(data = Rootmean, aes(y = Rootmean$mean, x = Rootmean$Soil, fill = Rootmean$Nutrient)) + 
+  facet_wrap(~ labels, ncol=4) +
+  scale_fill_manual(values=c("#D55E00", "#009E73"), name=element_blank(), breaks = c("low", "high"), labels = c("low nutrients", "high nutrients")) +
+  geom_bar(colour= "black",stat="identity", position=position_dodge()) +
+  geom_errorbar(data=Rootmean, aes(ymin = mean-se, ymax = mean+se), width=.4,position=position_dodge(.9))+
+  geom_text(data=Rootmean, aes(label = paste(sig), y=mean+se), position = position_dodge(width = 0.9), vjust = -1, size=4)+
+  theme_bw()+
+  theme(axis.text=element_text(size=11))+
+  theme(axis.title.x = element_blank())+
+  theme(axis.text.x=element_text(size=11))+
+  theme(axis.title.y=element_text(size=12, colour = "black",margin=(margin(0,10,0,0))))+
+  labs(y="Dry weight root (g)")+
+  coord_cartesian(ylim=c(0, 2.3)) +
+  #scale_y_continuous(breaks=seq(0,1,0.5))+
+  theme(legend.position= c(0.12,0.85))+
+  theme(legend.text = element_text(size = 10))+
+  theme(legend.key.size = unit(0.15, "in"))+  
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  theme(legend.background = element_blank())+
+  theme(strip.text.x=element_text(size=11, face="bold"), strip.background=element_rect(fill="grey"))
+
+plotB
+
+library(cowplot)
+plotRawbiomass <- plot_grid(plotA, plotB, labels=c("A", "B"), ncol=1)
+plotRawbiomass
+
+#save_plot("E:/Plant soil feedback/Students/Annelien/MS/Figures/Raw biomasses.png", 
+          plotRawbiomass, ncol=1, base_aspect_ratio = 1.5, dpi = 600)
+
+
+###############################CALCULATE PSF###############################
+# (own-mix) / mix
+PSFS <- (Datamin$Shoot[Datamin$Soil=="Own"]-Datamin$Shoot[Datamin$Soil=="Mix"]) / Datamin$Shoot[Datamin$Soil=="Mix"]
+PSFR <- (Datamin$Root[Datamin$Soil=="Own"]-Datamin$Root[Datamin$Soil=="Mix"]) / Datamin$Root[Datamin$Soil=="Mix"]
+PSFT <- (Datamin$Total[Datamin$Soil=="Own"]-Datamin$Total[Datamin$Soil=="Mix"]) / Datamin$Total[Datamin$Soil=="Mix"]
+
+#make dataframe
+PSF <- data.frame(Datamin$Species[Datamin$Soil=="Own"], Datamin$Nutrient[Datamin$Soil=="Own"], PSFS, PSFR, PSFT)
+colnames(PSF) <- c("Species", "Nutrient", "PSFS", "PSFR", "PSFT")
+head(PSF)
+
+Datamin$ID[Datamin$Nplants==3]
+Datamin$Species[Datamin$Nplants==3]
+Datamin[40:91,]
+#Fr own high min 6
+#Lh own high min 1
+#Lh own high min 5
+#Add to PSF dataframa
+
+PSF$Nplants <- 4
+PSF$rep <- c(1:6)
+PSF$Nplants[PSF$Species=="Fr" & PSF$Nutrient=="high" & PSF$rep=="6"] <- 3
+PSF$Nplants[PSF$Species=="Lh" & PSF$Nutrient=="high" & PSF$rep=="1"] <- 3
+PSF$Nplants[PSF$Species=="Lh" & PSF$Nutrient=="high" & PSF$rep=="5"] <- 3
+PSF
+
+# B. Outliers
+MyVar <- c("PSFS", "PSFR", "PSFT")      
+Mydotplot(PSF[, MyVar])
+#possibly PSFS has an outlier --> above 1
+
+# Visualize
+p <- ggplot()
+p <- p + geom_boxplot(data = PSF, 
+                      aes(y = PSFS, 
+                          x = Nutrient))                 
+p <- p + ylab("PSFS")
+p <- p + theme(text = element_text(size=15)) 
+p <- p + facet_wrap(~ Species, scales = "fixed")
+p
+#Nutrients matter for Lh and Pl, but not for Ao and Fr
+
+# Visualize
+p <- ggplot()
+p <- p + geom_boxplot(data = PSF, 
+                      aes(y = PSFR, 
+                          x = Nutrient))                 
+p <- p + ylab("PSFR")
+p <- p + theme(text = element_text(size=15)) 
+p <- p + facet_wrap(~ Species, scales = "fixed")
+p
+#Nutrient matter for Lh, Pl check data
+
+# Visualize
+p <- ggplot()
+p <- p + geom_boxplot(data = PSF, 
+                      aes(y = PSFT, 
+                          x = Nutrient))                 
+p <- p + ylab("PSFT")
+p <- p + theme(text = element_text(size=15)) 
+p <- p + facet_wrap(~ Species, scales = "fixed")
+p
+#Nutrients matter for Lh and Pl
+
+#To try without pots with 3 plants
+PSF2 <- PSF[which (PSF$Nplants==4),]
+
+#save(PSF2,file="PSFmin.Rda")
+
+# END OF DATA EXPLORATION
+#################################Linear model for PSF######################################
+library(lme4)
+library(car)
+
+#PSFS
+M0 <- lm(PSFS ~ Species * Nutrient,
+           data = PSF)
+
+summary(M0) 
+Anova(M0, type=3) #interaction significant
+drop1(M0, test="Chi") #suggests to keep the model the way it is
+
+#model validation
+E0 <- resid(M0, type = "pearson")
+F0 <- fitted(M0)
+
+plot(M0)
+
+par(mfrow = c(2, 2))
+plot(x = F0, 
+     y = E0,
+     xlab = "Fitted values",
+     ylab = "Residuals",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+lines(loess.smooth(F0, E0), col="red")
+#trouble, heterogeneity
+#more variation with higher fitted values
+
+#plot per covariate
+plot(x = PSF$PSFS, 
+     y = E0,
+     xlab = "PSFS",
+     ylab = "Residuals",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+#higher variation with higher PSFS
+
+plot(x = PSF$Nutrient, 
+     y = E0,
+     xlab = "Nutrient",
+     ylab = "E0",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+#mmm... not really
+
+#model with varIdent on PSFS
+library(nlme)
+
+vf1 <- varIdent(form = ~ 1|Species)
+
+M1 <- gls(PSFS ~ Species * Nutrient,
+               data = PSF2, weights = vf1)
+
+summary(M1) 
+Anova(M1, type=3) #interaction significant
+
+E1 <- resid(M1, type = "pearson")
+F1 <- fitted(M1)
+
+par(mfrow = c(2, 2))
+plot(x = F1, 
+     y = E1,
+     xlab = "Fitted values",
+     ylab = "Residuals",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+lines(loess.smooth(F1, E1), col="red")
+#better
+
+qqnorm(E1)
+#alright
+
+#Posthoc emmeans PSFS
+emmeans(M1, pairwise ~ Nutrient | Species)
+
+
+#PSFR
+M2 <- lm(PSFR ~ Species * Nutrient,
+         data = PSF)
+
+summary(M2) 
+Anova(M2, type=3)
+drop1(M2, test="Chi")
+
+#model validation
+E2 <- resid(M2, type = "pearson")
+F2 <- fitted(M2)
+
+par(mfrow = c(2, 2))
+plot(M2)
+#normality mmm?
+
+par(mfrow = c(2, 2))
+plot(x = F2, 
+     y = E2,
+     xlab = "Fitted values",
+     ylab = "Residuals",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+lines(loess.smooth(F2, E2), col="red")
+#maybe some more variation at higher fitted values?
+
+plot(x = PSF$Nutrient, 
+     y = E2,
+     xlab = "Nutrient",
+     ylab = "E0",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+#mmm... not really, although more outliers at high nutrients
+
+plot(x = PSF$Species, 
+     y = E2,
+     xlab = "Species",
+     ylab = "E0",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+#more variation for Festuca, less for Plantago
+
+#model with varIdent on species
+library(nlme)
+
+vf2 <- varIdent(form = ~ 1|Species) #good
+
+M3 <- gls(PSFR ~ Species * Nutrient,
+          data = PSF2, weights = vf2)
+
+summary(M3) 
+Anova(M3, type=3)
+
+E3 <- resid(M3, type = "pearson")
+F3 <- fitted(M3)
+
+par(mfrow = c(2, 2))
+plot(x = F3, 
+     y = E3,
+     xlab = "Fitted values",
+     ylab = "Residuals",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+lines(loess.smooth(F3, E3), col="red")
+#better
+
+qqnorm(E3)
+#alright
+
+plot(x = PSF$Nutrient, 
+     y = E3,
+     xlab = "Nutrient",
+     ylab = "Residuals",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+#better, less outliers for high
+
+plot(x = PSF$Species, 
+     y = E3,
+     xlab = "Species",
+     ylab = "E0",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+#better
+
+#Posthoc emmeans PSFR
+emmeans(M3, pairwise ~ Nutrient | Species)
+
+
+
+#PSFT
+M4 <- lm(PSFT ~ Species * Nutrient,
+         data = PSF)
+
+summary(M4) 
+Anova(M4, type=3)
+drop1(M4, test="Chi")
+
+#model validation
+E4 <- resid(M4, type = "pearson")
+F4 <- fitted(M4)
+
+plot(M4)
+#normality mmm?
+
+qqnorm(E4)
+#alright
+
+par(mfrow = c(2, 2))
+plot(x = F4, 
+     y = E4,
+     xlab = "Fitted values",
+     ylab = "Residuals",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+lines(loess.smooth(F4, E4), col="red")
+#looks acceptable
+
+#plot per covariate
+plot(x = PSF$PSFT, 
+     y = E4,
+     xlab = "PSFT",
+     ylab = "Residuals",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+#higher variation with higher PSFS
+
+plot(x = PSF$Nutrient, 
+     y = E4,
+     xlab = "Nutrient",
+     ylab = "E0",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+#mmm... not really
+
+plot(x = PSF$Species, 
+     y = E4,
+     xlab = "Species",
+     ylab = "E0",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+#less variation for Pl
+
+
+#model with varIdent on PSFT
+library(nlme)
+
+vf3 <- varIdent(form = ~ 1|Species) #works well
+
+M5 <- gls(PSFT ~ Species * Nutrient,
+          data = PSF2, weights = vf3)
+
+summary(M5) 
+Anova(M5, type=3)
+
+E5 <- resid(M5, type = "pearson")
+F5 <- fitted(M5)
+
+par(mfrow = c(2, 2))
+plot(x = F5, 
+     y = E5,
+     xlab = "Fitted values",
+     ylab = "Residuals",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+lines(loess.smooth(F5, E5), col="red")
+#good!
+
+qqnorm(E5)
+#alright
+
+plot(x = PSF$Nutrient, 
+     y = E5,
+     xlab = "Nutrient",
+     ylab = "E0",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+#good
+
+plot(x = PSF$Species, 
+     y = E5,
+     xlab = "Species",
+     ylab = "E0",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+#better
+
+
+###############################PLOTS PSF AND NUTRIENTS######################
+library(plyr)
+
+#Calculate mean and SE for plot
+PSFSmean <- ddply(PSF2, c("Species", "Nutrient"), summarise,
+               N    = length(PSFS),
+               mean = mean(PSFS),
+               sd   = sd(PSFS),
+               se   = sd / sqrt(N)
+)
+
+#reorder nutrients
+PSFSmean$Nutrient <- factor(PSFSmean$Nutrient, levels = unique(PSFSmean$Nutrient[rev(PSFSmean[,2])]))
+
+#Add species names
+PSFSmean$labels <- c("Anthoxanthum", "Anthoxanthum", "Festuca", "Festuca", "Leontodon", "Leontodon", "Plantago", "Plantago") 
+PSFSmean$sig1 <- c("", "ns", "", "ns", "", "", "", "")
+PSFSmean$sig2 <- c("", "", "", "", "", " **", "", "***")
+
+#PSFS
+plotA <- ggplot(data = PSFSmean, aes(y = mean, x = Nutrient, fill = Nutrient)) + 
+  facet_wrap(~ labels, ncol=4) +
+  scale_fill_manual(values=c("#D55E00", "#009E73"), name=element_blank(), breaks = c("low", "high"), labels = c("low nutrients", "high nutrients")) +
+  geom_bar(colour= "black",stat="identity", position=position_dodge()) +
+  geom_errorbar(data=PSFSmean, aes(ymin = mean-se, ymax = mean+se), width=.4,position=position_dodge(.9))+
+  geom_hline(yintercept = 0) +
+  geom_text(data=PSFSmean, aes(label = paste(sig1), y=c(0.26, 0.26, 0.20, 0.20, 0.75, 0.75, -0.50, -0.50)), position = position_dodge(width = 0.9), hjust = -1.4, size=3.5)+
+  geom_text(data=PSFSmean, aes(label = paste(sig2), y=c(0.26, 0.26, 0.20, 0.20, 0.73, 0.73, -0.50, -0.50)), position = position_dodge(width = 0.9), hjust = -0.8, size=5)+
+  theme_bw()+
+  theme(axis.text=element_text(size=11))+
+  theme(axis.title.x = element_blank())+
+  theme(axis.text.x=element_text(size=11))+
+  theme(axis.title.y=element_text(size=12, colour = "black",margin=(margin(0,10,0,0))))+
+  labs(y="Plant-soil feedback
+       shoot")+
+  theme(legend.position= "none")+
+  #theme(legend.position= c(0.12,0.9))+
+  #theme(legend.text = element_text(size = 10))+
+  #theme(legend.key.size = unit(0.15, "in"))+  
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  theme(legend.background = element_blank())+
+  coord_cartesian(ylim = c(-0.5, 0.75))+
+  theme(strip.text.x=element_text(size=11, face="bold"), strip.background=element_rect(fill="grey"))
+
+plotA
+
+#PSFR
+#Calculate mean and SE for plot
+PSFRmean <- ddply(PSF2, c("Species", "Nutrient"), summarise,
+                  N    = length(PSFR),
+                  mean = mean(PSFR),
+                  sd   = sd(PSFR),
+                  se   = sd / sqrt(N)
+)
+
+#reorder nutrients
+PSFRmean$Nutrient <- factor(PSFRmean$Nutrient, levels = unique(PSFRmean$Nutrient[rev(PSFRmean[,2])]))
+
+#Add species names
+PSFRmean$labels <- c("Anthoxanthum", "Anthoxanthum", "Festuca", "Festuca", "Leontodon", "Leontodon", "Plantago", "Plantago") 
+PSFRmean$sig1 <- c("", "ns", "", "ns", "", "", "", "ns")
+PSFRmean$sig2 <- c("", "", "", "", "", "  *", "", "")
+
+#PSFR
+plotB <- ggplot(data = PSFRmean, aes(y = mean, x = Nutrient, fill = Nutrient)) + 
+  facet_wrap(~ labels, ncol=4) +
+  scale_fill_manual(values=c("#D55E00", "#009E73"), name=element_blank(), breaks = c("low", "high"), labels = c("low nutrients", "high nutrients")) +
+  geom_bar(colour= "black",stat="identity", position=position_dodge()) +
+  geom_errorbar(data=PSFRmean, aes(ymin = mean-se, ymax = mean+se), width=.4,position=position_dodge(.9))+
+  geom_hline(yintercept = 0) +
+  geom_text(data=PSFRmean, aes(label = paste(sig1), y=c(-0.42, -0.42, 0.68, 0.68, 0.30, 0.30, -0.22, -0.22)), position = position_dodge(width = 0.9), hjust = -1.4, size=3.5)+
+  geom_text(data=PSFRmean, aes(label = paste(sig2), y=c(-0.42, -0.42, 0.68, 0.68, 0.30, 0.30, -0.22, -0.22)), position = position_dodge(width = 0.9), hjust = -0.8, size=5)+
+  theme_bw()+
+  theme(axis.text=element_text(size=11))+
+  theme(axis.title.x = element_blank())+
+  theme(axis.text.x=element_text(size=11))+
+  theme(axis.title.y=element_text(size=12, colour = "black",margin=(margin(0,10,0,0))))+
+  labs(y="Plant-soil feedback
+       root")+
+  theme(legend.position= "none")+
+  #theme(legend.position= c(0.12,0.9))+
+  #theme(legend.text = element_text(size = 10))+
+  #theme(legend.key.size = unit(0.15, "in"))+  
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  theme(legend.background = element_blank())+
+  coord_cartesian(ylim = c(-0.5, 0.75))+
+  theme(strip.text.x=element_text(size=11, face="bold"), strip.background=element_rect(fill="grey"))
+
+plotB
+
+library(cowplot)
+plotPSF_nutrient <- plot_grid(plotA, plotB, labels=c("A", "B"), ncol=1)
+
+#save_plot("E:/Plant soil feedback/Students/Annelien/MS/Figures/Plant soil feedback and nutrients.png", 
+          plotPSF_nutrient, ncol=1, base_aspect_ratio = 1.5, dpi = 600)
+
+#PSFT
+#Calculate mean and SE for plot
+PSFTmean <- ddply(PSF, c("Species", "Nutrient"), summarise,
+                  N    = length(PSFT),
+                  mean = mean(PSFT),
+                  sd   = sd(PSFT),
+                  se   = sd / sqrt(N)
+)
+
+#reorder nutrients
+PSFTmean$Nutrient <- factor(PSFTmean$Nutrient, levels = unique(PSFTmean$Nutrient[rev(PSFTmean[,2])]))
+
+#PSFT
+plot <- ggplot(data = PSFTmean, aes(y = mean, x = Nutrient, fill = Nutrient)) + 
+  facet_wrap(~ Species) +
+  scale_fill_manual(values=c("#D55E00", "#009E73"), name=element_blank()) +
+  geom_bar(colour= "black",stat="identity", position=position_dodge()) +
+  geom_errorbar(data=PSFTmean, aes(ymin = mean-se, ymax = mean+se), width=.4,position=position_dodge(.9))+
+  geom_hline(yintercept = 0) +
+  theme_bw()+
+  theme(axis.text=element_text(size=25))+
+  theme(axis.title.x = element_blank())+
+  theme(axis.text.x=element_text(size=20))+
+  theme(axis.title.y=element_text(size=28, colour = "black",margin=(margin(0,10,0,0))))+
+  labs(y="Plant-soil feedback total")+
+  theme(legend.position= "none")+
+  theme(legend.text = element_text(size = 20))+
+  theme(legend.key.size = unit(0.4, "in"))+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  coord_cartesian(ylim = c(-0.5, 0.75))+
+  theme(strip.text.x=element_text(size=20, face="bold"), strip.background=element_rect(fill="grey"))
+
+plot
+
+
+##################################################MYCORRHIZAE############################################
+#subset for nutrient analysis only
+Dataplus<-Data[ which(Data$Species=="Pl" | Data$Species=="Lh"),]
+Dataplus
+str(Dataplus)
+
+#new ID factor
+Dataplus$ID <- paste(Dataplus$Soil, Dataplus$Nutrient, Dataplus$Myc,
+                 sep = ".")
+
+#Take out pots without 4 plants
+Dataplus$ID[Dataplus$Nplants==3] #2 cases
+Dataplus2 <- Dataplus[which (Dataplus$Nplants==4),] #Lh own high min only 4 reps, but 3 myc counts
+
+# Visualize
+p <- ggplot()
+p <- p + geom_boxplot(data = Dataplus, 
+                      aes(y = Shoot, 
+                          x = ID))                 
+p <- p + ylab("Shoot")
+p <- p + theme(text = element_text(size=15)) 
+p <- p + facet_wrap(~ Species, scales = "fixed")
+p
+#Nutrients are beneficial for shoot growth
+
+# Visualize
+p <- ggplot()
+p <- p + geom_boxplot(data = Dataplus, 
+                      aes(y = Root, 
+                          x = ID))                 
+p <- p + ylab("Root")
+p <- p + theme(text = element_text(size=15)) 
+p <- p + facet_wrap(~ Species, scales = "fixed")
+p
+#Nutrient effect less clear here
+
+plot(Root~Shoot, data=Dataplus)
+
+# Visualize
+p <- ggplot()
+p <- p + geom_boxplot(data = Dataplus, 
+                      aes(y = Total, 
+                          x = ID))                 
+p <- p + ylab("Total")
+p <- p + theme(text = element_text(size=15)) 
+p <- p + facet_wrap(~ Species)
+p
+#Clear nutrient effects again
+
+# Visualize
+p <- ggplot()
+p <- p + geom_boxplot(data = Dataplus, 
+                      aes(y = Ratio, 
+                          x = ID))                 
+p <- p + ylab("RootShootRatio")
+p <- p + theme(text = element_text(size=15)) 
+p <- p + facet_wrap(~ Species, scales = "fixed")
+p
+#Clear responses to nutrients, decrease in ratio with high nutrients = less roots --> makes sense
+
+# Visualize
+p <- ggplot()
+p <- p + geom_boxplot(data = Dataplus, 
+                      aes(y = Shoot, 
+                          x = Myc))                 
+p <- p + ylab("Shoot")
+p <- p + theme(text = element_text(size=15)) 
+p <- p + facet_wrap(~ Species, scales = "fixed")
+p
+#Myccorhizae addition no effect, but big variation. Probably depending on treatment
+
+# Visualize
+p <- ggplot()
+p <- p + geom_boxplot(data = Dataplus, 
+                      aes(y = Root, 
+                          x = Myc))                 
+p <- p + ylab("Root")
+p <- p + theme(text = element_text(size=15)) 
+p <- p + facet_wrap(~ Species, scales = "fixed")
+p
+#Myccorhizae addition no effect, but big variation. Probably depending on treatment
+
+# Visualize
+p <- ggplot()
+p <- p + geom_boxplot(data = Dataplus, 
+                      aes(y = Total, 
+                          x = Myc))                 
+p <- p + ylab("Total")
+p <- p + theme(text = element_text(size=15)) 
+p <- p + facet_wrap(~ Species, scales = "fixed")
+p
+#Myccorhizae addition no effect, but big variation. Probably depending on treatment
+
+################################PLOTS WITH RAW BIOMASS MYCORRHIZAE##########################
+#subset for nutrient analysis only
+Dataplus<-Data[ which(Data$Species=="Pl" | Data$Species=="Lh"),]
+Dataplus
+str(Dataplus)
+
+#new ID factor
+Dataplus$ID <- paste(Dataplus$Soil, Dataplus$Nutrient, Dataplus$Myc,
+                     sep = ".")
+
+#Take out pots without 4 plants
+Dataplus$ID[Dataplus$Nplants==3] #2 cases
+Dataplus2 <- Dataplus[which (Dataplus$Nplants==4),] #Lh own high min only 4 reps, but 3 myc counts
+
+head(Dataplus2)
+
+#Posthoc
+library(lsmeans)
+library(nlme)
+library(emmeans)
+
+#Shoot
+vf <- varIdent(form= ~ 1|Nutrient)
+model <- gls(Shoot ~ Species * Soil * Nutrient * Myc, data=Dataplus2, weights = vf)
+qqnorm(resid(model))
+plot(model) #mew, somewhat higher variation with higher fitted values --> Nutrient effect --> vf Nutrient
+emmeans(model, pairwise ~ Soil * Myc | Species * Nutrient)
+
+#Root
+vf <- varIdent(form= ~ 1|Nutrient)
+model <- gls(Root ~ Species * Soil * Nutrient * Myc, data=Dataplus2)
+qqnorm(resid(model))
+plot(model) #good
+emmeans(model, pairwise ~ Soil * Myc | Species * Nutrient)
+
+
+#Calculate mean and SE for plot
+Shootmean <- ddply(Dataplus2, c("Species", "Soil", "Nutrient", "Myc"), summarise,
+                   N    = length(Shoot),
+                   mean = mean(Shoot),
+                   sd   = sd(Shoot),
+                   se   = sd / sqrt(N)
+)
+
+Shootmean
+
+#Add species as labels
+#Add species names
+Shootmean$labels <- c("Leontodon - high", "Leontodon - high", "Leontodon - low", "Leontodon - low",
+                      "Leontodon - high", "Leontodon - high", "Leontodon - low", "Leontodon - low",
+                      "Plantago - high", "Plantago - high", "Plantago - low", "Plantago - low",
+                      "Plantago - high", "Plantago - high", "Plantago - low", "Plantago - low")
+Shootmean$sig <- c("a", "a", "b", "b", "a", "a", "a", "a", "ab", "b", "b", "b", "a", "ab", "a", "a")
+
+#reorder nutrients
+Shootmean$Soil <- factor(Shootmean$Soil, levels = unique(rev(Shootmean[,2])))
+Shootmean$Nutrient <- factor(Shootmean$Nutrient, levels = unique(rev(Shootmean[,3])))
+Shootmean$labels <- factor(Shootmean$labels, levels = unique(c("Leontodon - low", "Leontodon - high", "Plantago - low", "Plantago - high")))
+
+#Shoot
+plotA <- ggplot(data = Shootmean, aes(y = mean, x = Soil, fill = Myc)) + 
+  facet_wrap(~ labels, ncol=4) +
+  scale_fill_manual(values=c("#E69F00", "#0072B2"), name=element_blank(), breaks = c("Min", "Plus"), labels = c("no AMF added", "AMF added")) +
+  geom_bar(colour= "black",stat="identity", position=position_dodge()) +
+  geom_errorbar(data=Shootmean, aes(ymin = mean-se, ymax = mean+se), width=.4,position=position_dodge(.9))+
+  geom_text(data=Shootmean, aes(label = paste(sig), y=mean+se), position = position_dodge(width = 0.9), vjust = -1, size=4)+
+  theme_bw()+
+  theme(axis.text=element_text(size=11))+
+  theme(axis.title.x = element_blank())+
+  theme(axis.text.x=element_text(size=11))+
+  theme(axis.title.y=element_text(size=12, colour = "black",margin=(margin(0,10,0,0))))+
+  labs(y="Dry weight shoot (g)")+
+  coord_cartesian(ylim=c(0, 2.3)) +
+  theme(legend.position= c(0.12,0.85))+
+  theme(legend.text = element_text(size = 10))+
+  theme(legend.key.size = unit(0.15, "in"))+  
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  theme(legend.background = element_blank())+
+  theme(strip.text.x=element_text(size=10, face="bold"), strip.background=element_rect(fill="grey"))
+
+plotA
+
+#Calculate mean and SE for plot
+Rootmean <- ddply(Dataplus2, c("Species", "Soil", "Nutrient", "Myc"), summarise,
+                   N    = length(Root),
+                   mean = mean(Root),
+                   sd   = sd(Root),
+                   se   = sd / sqrt(N)
+)
+
+Rootmean
+
+#Add species as labels
+#Add species names
+Rootmean$labels <- c("Leontodon - high", "Leontodon - high", "Leontodon - low", "Leontodon - low",
+                      "Leontodon - high", "Leontodon - high", "Leontodon - low", "Leontodon - low",
+                      "Plantago - high", "Plantago - high", "Plantago - low", "Plantago - low",
+                      "Plantago - high", "Plantago - high", "Plantago - low", "Plantago - low")
+Rootmean$sig <- c("a", "a", "ab", "b", "a", "a", "ab", "a", "a", "a", "a", "b", "a", "a", "a", "ab")
+
+#reorder nutrients
+Rootmean$Soil <- factor(Rootmean$Soil, levels = unique(rev(Rootmean[,2])))
+Rootmean$Nutrient <- factor(Rootmean$Nutrient, levels = unique(rev(Rootmean[,3])))
+Rootmean$labels <- factor(Rootmean$labels, levels = unique(c("Leontodon - low", "Leontodon - high", "Plantago - low", "Plantago - high")))
+
+#Root
+plotB <- ggplot(data = Rootmean, aes(y = mean, x = Soil, fill = Myc)) + 
+  facet_wrap(~ labels, ncol=4) +
+  scale_fill_manual(values=c("#E69F00", "#0072B2"), name=element_blank(), breaks = c("Min", "Plus"), labels = c("no AMF added", "AMF added")) +
+  geom_bar(colour= "black",stat="identity", position=position_dodge()) +
+  geom_errorbar(data=Rootmean, aes(ymin = mean-se, ymax = mean+se), width=.4,position=position_dodge(.9))+
+  geom_text(data=Rootmean, aes(label = paste(sig), y=mean+se), position = position_dodge(width = 0.9), vjust = -1, size=4)+
+  theme_bw()+
+  theme(axis.text=element_text(size=11))+
+  theme(axis.title.x = element_blank())+
+  theme(axis.text.x=element_text(size=11))+
+  theme(axis.title.y=element_text(size=12, colour = "black",margin=(margin(0,10,0,0))))+
+  labs(y="Dry weight root (g)")+
+  coord_cartesian(ylim=c(0, 2.3)) +
+  theme(legend.position= c(0.12,0.85))+
+  theme(legend.text = element_text(size = 10))+
+  theme(legend.key.size = unit(0.15, "in"))+  
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  theme(legend.background = element_blank())+
+  theme(strip.text.x=element_text(size=10, face="bold"), strip.background=element_rect(fill="grey"))
+
+plotB
+
+library(cowplot)
+plotRawbiomass <- plot_grid(plotA, plotB, labels=c("A", "B"), ncol=1)
+plotRawbiomass
+
+#save_plot("E:/Plant soil feedback/Students/Annelien/MS/Figures/Raw biomasses_mycorrhizae.png", 
+          plotRawbiomass, ncol=1, base_aspect_ratio = 1.5, dpi = 600)
+
+
+###############################CALCULATE PSF###############################
+#subset for nutrient analysis only
+Dataplus<-Data[ which(Data$Species=="Pl" | Data$Species=="Lh"),]
+Dataplus
+str(Dataplus)
+
+# (own-mix) / mix
+PSFS <- (Dataplus$Shoot[Dataplus$Soil=="Own"]-Dataplus$Shoot[Dataplus$Soil=="Mix"]) / Dataplus$Shoot[Dataplus$Soil=="Mix"]
+PSFR <- (Dataplus$Root[Dataplus$Soil=="Own"]-Dataplus$Root[Dataplus$Soil=="Mix"]) / Dataplus$Root[Dataplus$Soil=="Mix"]
+PSFT <- (Dataplus$Total[Dataplus$Soil=="Own"]-Dataplus$Total[Dataplus$Soil=="Mix"]) / Dataplus$Total[Dataplus$Soil=="Mix"]
+
+#make dataframe
+PSFplus <- data.frame(Dataplus$Species[Dataplus$Soil=="Own"], Dataplus$Nutrient[Dataplus$Soil=="Own"], Dataplus$Myc[Dataplus$Soil=="Own"], PSFS, PSFR, PSFT)
+colnames(PSFplus) <- c("Species", "Nutrient", "Myc", "PSFS", "PSFR", "PSFT")
+head(PSFplus)
+
+PSFplus$ID <- paste(PSFplus$Nutrient, PSFplus$Myc, sep=".")
+head(PSFplus)
+
+#Get rid off pots without 4 individuals
+PSFplus$Nplants <- 4
+PSFplus$rep <- c(1:6)
+PSFplus$Nplants[PSFplus$Species=="Lh" & PSFplus$Nutrient=="high" & PSFplus$Myc=="Min" & PSFplus$rep=="1"] <- 3
+PSFplus$Nplants[PSFplus$Species=="Lh" & PSFplus$Nutrient=="high" & PSFplus$Myc=="Min" & PSFplus$rep=="5"] <- 3
+PSFplus
+
+PSFplus2 <- PSFplus[ which (PSFplus$Nplants==4),]
+
+#save(PSFplus2, file="PSFplus.rda")
+
+# B. Outliers
+MyVar <- c("PSFS", "PSFR", "PSFT")      
+Mydotplot(PSF[, MyVar])
+#possibly PSFS has an outlier
+
+# Visualize
+p <- ggplot()
+p <- p + geom_boxplot(data = PSFplus, 
+                      aes(y = PSFS, 
+                          x = ID))                 
+p <- p + ylab("PSFS")
+p <- p + theme(text = element_text(size=15)) 
+p <- p + facet_wrap(~ Species, scales = "fixed")
+p
+#Nutrient effect on PSF the same for plus myc treatments
+#under low: myc beneficial, under high less beneficiat or not at all
+
+# Visualize
+p <- ggplot()
+p <- p + geom_boxplot(data = PSFplus, 
+                      aes(y = PSFR, 
+                          x = ID))                 
+p <- p + ylab("PSFR")
+p <- p + theme(text = element_text(size=15)) 
+p <- p + facet_wrap(~ Species, scales = "fixed")
+p
+#Mycorhizae seem beneficial for roots, but especially with high nutrients!
+
+# Visualize
+p <- ggplot()
+p <- p + geom_boxplot(data = PSFplus, 
+                      aes(y = PSFT, 
+                          x = ID))                 
+p <- p + ylab("PSFT")
+p <- p + theme(text = element_text(size=15)) 
+p <- p + facet_wrap(~ Species, scales = "fixed")
+p
+#Overall, myccorhizae positive, both under high and low for Lh
+#Pl
+
+# END OF DATA EXPLORATION
+
+########################################STATS MYCORRHIZAE PSF#######################################################
+library(lme4)
+library(car)
+library(nlme)
+library(emmeans)
+
+#PSFS
+vf <- varIdent(form= ~ 1|Nutrient)
+M0 <- gls(PSFS ~ Species * Nutrient * Myc,
+         data = PSFplus2, weights=vf)
+emmeans(M0, pairwise ~ Nutrient * Myc | Species)
+
+#PSFR
+vf <- varIdent(form= ~ 1|Nutrient * Myc) #best
+M0 <- gls(PSFR ~ Species * Nutrient * Myc,
+          data = PSFplus2, weights=vf)
+emmeans(M0, pairwise ~ Nutrient * Myc | Species)
+
+summary(M0) 
+Anova(M0, type=3)
+drop1(M0, test="Chi")
+
+#model validation
+E0 <- resid(M0, type = "pearson")
+F0 <- fitted(M0)
+
+qqnorm(E0)
+plot(M0)
+
+par(mfrow = c(2, 2))
+plot(x = F0, 
+     y = E0,
+     xlab = "Fitted values",
+     ylab = "Residuals",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+lines(loess.smooth(F0, E0), col="red")
+#trouble, heterogeneity
+#more variation with higher fitted values
+
+#plot per covariate
+plot(x = PSFplus$PSFS, 
+     y = E0,
+     xlab = "PSFS",
+     ylab = "Residuals",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+#higher variation with higher PSFS
+
+plot(x = PSFplus2$Nutrient, 
+     y = E0,
+     xlab = "Nutrient",
+     ylab = "E0",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+#mmm... not really
+
+plot(x = PSFplus2$Species, 
+     y = E0,
+     xlab = "Species",
+     ylab = "E0",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+#more variation for Lh
+
+plot(x = PSFplus2$Myc, 
+     y = E0,
+     xlab = "Myc",
+     ylab = "E0",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+#not really
+
+#not enough statistical power to add weights function, so do per species
+#subset per species
+Lhplus <- PSFplus2[ which(PSFplus2$Species=="Lh"),]
+Plplus <- PSFplus2[ which(PSFplus2$Species=="Pl"),]
+
+#Lh
+#PSFS
+M0 <- lm(PSFS ~ Nutrient * Myc,
+         data = Lhplus)
+
+summary(M0) 
+Anova(M0, type=3)
+drop1(M0, test="Chi")
+
+#model validation
+E0 <- resid(M0, type = "pearson")
+F0 <- fitted(M0)
+
+plot(M0)
+
+par(mfrow = c(2, 2))
+plot(x = F0, 
+     y = E0,
+     xlab = "Fitted values",
+     ylab = "Residuals",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+lines(loess.smooth(F0, E0), col="red")
+#trouble, heterogeneity
+#more variation with higher fitted values
+
+#plot per covariate
+plot(x = Lhplus$PSFS, 
+     y = E0,
+     xlab = "PSFS",
+     ylab = "Residuals",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+#mmm...
+
+plot(x = Lhplus$Nutrient, 
+     y = E0,
+     xlab = "Nutrient",
+     ylab = "E0",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+#mmm... more variation with low nutrients
+
+plot(x = Lhplus$Myc, 
+     y = E0,
+     xlab = "Myc",
+     ylab = "E0",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+#more variation for plus myc
+
+#model with varIdent
+library(nlme)
+
+vf1 <- varIdent(form = ~ 1|Nutrient)
+
+M1 <- gls(PSFS ~ Nutrient * Myc,
+          data = Lhplus, weights = vf1)
+
+summary(M1) 
+Anova(M1, type=3)
+
+E1 <- resid(M1, type = "pearson")
+F1 <- fitted(M1)
+
+par(mfrow = c(2, 2))
+plot(x = F1, 
+     y = E1,
+     xlab = "Fitted values",
+     ylab = "Residuals",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+lines(loess.smooth(F1, E1), col="red")
+#better
+
+qqnorm(E1)
+#alright
+
+plot(x = Lhplus$Nutrient, 
+     y = E1,
+     xlab = "Nutrient",
+     ylab = "Residuals",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+#alright
+
+plot(x = Lhplus$Myc, 
+     y = E1,
+     xlab = "Myc",
+     ylab = "Residuals",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+#alright
+
+#Posthoc
+emmeans(M1, pairwise ~ Nutrient * Myc)
+
+
+#PSFR
+M1 <- lm(PSFR ~ Nutrient * Myc,
+         data = Lhplus)
+
+summary(M1) 
+Anova(M1, type=3)
+drop1(M1, test="Chi")
+
+#model validation
+E1 <- resid(M1, type = "pearson")
+F1 <- fitted(M1)
+
+plot(M1)
+
+par(mfrow = c(2, 2))
+plot(x = F1, 
+     y = E1,
+     xlab = "Fitted values",
+     ylab = "Residuals",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+lines(loess.smooth(F1, E1), col="red")
+#trouble, heterogeneity
+#more variation with higher fitted values
+
+#plot per covariate
+plot(x = Lhplus$Nutrient, 
+     y = E1,
+     xlab = "Nutrient",
+     ylab = "E1",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+#mmm... more variation with low nutrients
+
+plot(x = Lhplus$Myc, 
+     y = E1,
+     xlab = "Myc",
+     ylab = "E1",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+#ok
+
+#model with varIdent
+library(nlme)
+
+vf <- varIdent(form = ~ 1|Nutrient*Myc) #best
+
+M1 <- gls(PSFR ~ Nutrient * Myc,
+          data = Lhplus, weights = vf)
+
+summary(M1) 
+Anova(M1, type=3)
+
+E1 <- resid(M1, type = "pearson")
+F1 <- fitted(M1)
+
+par(mfrow = c(2, 2))
+plot(x = F1, 
+     y = E1,
+     xlab = "Fitted values",
+     ylab = "Residuals",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+lines(loess.smooth(F1, E1), col="red")
+#better
+
+qqnorm(E1)
+#alright
+
+plot(x = Lhplus$Nutrient, 
+     y = E1,
+     xlab = "Nutrient",
+     ylab = "Residuals",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+#alright
+
+plot(x = Lhplus$Myc, 
+     y = E1,
+     xlab = "Myc",
+     ylab = "Residuals",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+#alright
+
+#Posthoc
+emmeans(M1, pairwise ~ Nutrient * Myc)
+
+
+
+#PSFT
+M2 <- lm(PSFT ~ Nutrient * Myc,
+         data = Lhplus)
+
+summary(M2) 
+Anova(M2, type=3) #interaction significant
+drop1(M2, test="Chi") #suggests to keep the model the way it is
+
+#model validation
+E2 <- resid(M2, type = "pearson")
+F2 <- fitted(M2)
+
+plot(M2)
+
+par(mfrow = c(2, 2))
+plot(x = F2, 
+     y = E2,
+     xlab = "Fitted values",
+     ylab = "Residuals",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+lines(loess.smooth(F2, E2), col="red")
+#trouble, heterogeneity
+#more variation with higher fitted values
+
+#plot per covariate
+plot(x = Lhplus$Nutrient, 
+     y = E2,
+     xlab = "Nutrient",
+     ylab = "E1",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+#mmm... more variation with low nutrients
+
+plot(x = Lhplus$Myc, 
+     y = E2,
+     xlab = "Myc",
+     ylab = "E1",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+#ok, maybe more variation with myc added
+
+#model with varIdent
+library(nlme)
+
+vf <- varIdent(form = ~ 1|Nutrient) #best
+
+M2 <- gls(PSFS ~ Nutrient * Myc,
+          data = Lhplus, weights = vf)
+
+summary(M2) 
+Anova(M2, type=3)
+
+#model validation
+E2 <- resid(M2, type = "pearson")
+F2 <- fitted(M2)
+
+plot(M2)
+
+par(mfrow = c(2, 2))
+plot(x = F2, 
+     y = E2,
+     xlab = "Fitted values",
+     ylab = "Residuals",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+lines(loess.smooth(F2, E2), col="red")
+#ok
+
+#plot per covariate
+plot(x = Lhplus$Nutrient, 
+     y = E2,
+     xlab = "Nutrient",
+     ylab = "E1",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+#ok
+
+plot(x = Lhplus$Myc, 
+     y = E2,
+     xlab = "Myc",
+     ylab = "E1",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+#ok, maybe more variation with myc added
+
+
+#Pl
+#PSFS
+M3 <- gls(PSFS ~ Nutrient * Myc,
+         data = Plplus)
+
+summary(M3) 
+Anova(M3, type=3) #interaction significant
+drop1(M3, test="Chi") #suggests to keep the model the way it is
+
+#model validation
+E3 <- resid(M3, type = "pearson")
+F3 <- fitted(M3)
+
+plot(M3)
+
+par(mfrow = c(2, 2))
+plot(x = F3, 
+     y = E3,
+     xlab = "Fitted values",
+     ylab = "Residuals",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+lines(loess.smooth(F3, E3), col="red")
+#good
+
+#plot per covariate
+plot(x = Plplus$PSFS, 
+     y = E3,
+     xlab = "PSFS",
+     ylab = "Residuals",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+#mmm ok
+
+plot(x = Plplus$Nutrient, 
+     y = E3,
+     xlab = "Nutrient",
+     ylab = "E3",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+#ok
+
+plot(x = Plplus$Myc, 
+     y = E3,
+     xlab = "Myc",
+     ylab = "E3",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+#slightly more variation for myc plus
+
+#model with varIdent
+library(nlme)
+
+vf2 <- varIdent(form = ~ 1|Myc)
+
+M3 <- gls(PSFS ~ Nutrient * Myc,
+          data = Plplus, weights = vf2)
+
+summary(M3) 
+Anova(M3, type=3)
+
+E3 <- resid(M3, type = "pearson")
+F3 <- fitted(M3)
+
+par(mfrow = c(2, 2))
+plot(x = F3, 
+     y = E3,
+     xlab = "Fitted values",
+     ylab = "Residuals",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+lines(loess.smooth(F3, E3), col="red")
+#good
+
+qqnorm(E3)
+#alright
+
+plot(x = Plplus$Nutrient, 
+     y = E3,
+     xlab = "Nutrient",
+     ylab = "Residuals",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+#alright
+
+plot(x = Plplus$Myc, 
+     y = E3,
+     xlab = "Myc",
+     ylab = "Residuals",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+#slightly better?
+
+#Posthoc emmeans
+emmeans(M3, pairwise ~ Nutrient * Myc)
+
+
+#PSFR
+M4 <- gls(PSFR ~ Nutrient * Myc,
+         data = Plplus)
+
+summary(M4) 
+Anova(M4, type=3)
+drop1(M4, test="Chi") #suggests to keep the model the way it is
+
+#model validation
+E4 <- resid(M4, type = "pearson")
+F4 <- fitted(M4)
+
+plot(M4)
+
+par(mfrow = c(2, 2))
+plot(x = F4, 
+     y = E4,
+     xlab = "Fitted values",
+     ylab = "Residuals",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+lines(loess.smooth(F4, E4), col="red")
+#good
+
+#plot per covariate
+plot(x = Plplus$Nutrient, 
+     y = E4,
+     xlab = "Nutrient",
+     ylab = "E4",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+#ok
+
+plot(x = Plplus$Myc, 
+     y = E4,
+     xlab = "Myc",
+     ylab = "E4",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+#more variation for myc plus
+
+#model with varIdent
+library(nlme)
+
+vf <- varIdent(form = ~ 1|Myc)
+
+M4 <- gls(PSFR ~ Nutrient * Myc,
+          data = Plplus, weights = vf)
+
+summary(M4) 
+Anova(M4, type=3)
+
+#model validation
+E4 <- resid(M4, type = "pearson")
+F4 <- fitted(M4)
+
+par(mfrow = c(2, 2))
+plot(x = F4, 
+     y = E4,
+     xlab = "Fitted values",
+     ylab = "Residuals",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+lines(loess.smooth(F4, E4), col="red")
+#good, even better
+
+#plot per covariate
+plot(x = Plplus$Nutrient, 
+     y = E4,
+     xlab = "Nutrient",
+     ylab = "E4",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+#ok
+
+plot(x = Plplus$Myc, 
+     y = E4,
+     xlab = "Myc",
+     ylab = "E4",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+#better
+
+#Posthoc emmeans
+emmeans(M4, pairwise ~ Nutrient * Myc)
+
+
+#PSFT
+M5 <- lm(PSFT ~ Nutrient * Myc,
+         data = Plplus)
+
+summary(M5) 
+Anova(M5, type=3)
+drop1(M5, test="Chi")
+
+#model validation
+E5 <- resid(M5, type = "pearson")
+F5 <- fitted(M5)
+
+par(mfrow = c(2, 2))
+plot(x = F5, 
+     y = E5,
+     xlab = "Fitted values",
+     ylab = "Residuals",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+lines(loess.smooth(F5, E5), col="red")
+#mwah
+
+#plot per covariate
+plot(x = Plplus$Nutrient, 
+     y = E5,
+     xlab = "Nutrient",
+     ylab = "E",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+#ok
+
+plot(x = Plplus$Myc, 
+     y = E5,
+     xlab = "Myc",
+     ylab = "E",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+#more variation for myc plus
+
+#model with varIdent
+library(nlme)
+
+vf <- varIdent(form = ~ 1|Myc)
+
+M5 <- gls(PSFT ~ Nutrient * Myc,
+          data = Plplus, weights = vf)
+
+summary(M5) 
+Anova(M5, type=3)
+
+#model validation
+E5 <- resid(M5, type = "pearson")
+F5 <- fitted(M5)
+
+par(mfrow = c(2, 2))
+plot(x = F5, 
+     y = E5,
+     xlab = "Fitted values",
+     ylab = "Residuals",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+lines(loess.smooth(F5, E5), col="red")
+#maybe slightly better
+
+#plot per covariate
+plot(x = Plplus$Nutrient, 
+     y = E5,
+     xlab = "Nutrient",
+     ylab = "E",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+#ok
+
+plot(x = Plplus$Myc, 
+     y = E5,
+     xlab = "Myc",
+     ylab = "E",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+#bit better
+
+#################################################PLOTS MYCHORRIZAE PSF EFFECST#################################
+Dataplus2
+library(plyr)
+
+#Calculate mean and SE for plot
+PSFSplusmean <- ddply(PSFplus2, c("Species", "Nutrient", "Myc"), summarise,
+                   N    = length(PSFS),
+                   mean = mean(PSFS),
+                   sd   = sd(PSFS),
+                   se   = sd / sqrt(N)
+)
+
+PSFSplusmean
+
+#reorder nutrients
+PSFSplusmean$Nutrient <- factor(PSFSplusmean$Nutrient, levels = unique(rev(PSFSplusmean[,2])))
+
+#Add species as labels
+#Add species names
+PSFSplusmean$labels <- c("Leontodon", "Leontodon", "Leontodon", "Leontodon",
+                      "Plantago", "Plantago", "Plantago", "Plantago")
+PSFSplusmean$sig1 <- c("b", "b", "a", "a", "", "", "", "")
+PSFSplusmean$sig2 <- c("", "", "", "", "c", "c", "a", "b")
+
+#PSFS
+plotA <- ggplot(data = PSFSplusmean, aes(y = mean, x = Nutrient, fill = Myc)) + 
+  facet_wrap(~ labels) +
+  scale_fill_manual(values=c("#E69F00", "#0072B2"), name=element_blank(), breaks=c("Min", "Plus"),
+                    labels=c("No AMF added", "AMF added")) +
+  geom_hline(yintercept=0)+
+  geom_bar(colour= "black",stat="identity", position=position_dodge()) +
+  geom_errorbar(data=PSFSplusmean, aes(ymin = mean-se, ymax = mean+se), width=.4,position=position_dodge(.9))+
+  geom_text(data=PSFSplusmean, aes(label = paste(sig1), y=mean+se), position = position_dodge(width = 0.9), vjust = -1, size=4)+
+  geom_text(data=PSFSplusmean, aes(label = paste(sig2), y=mean-se), position = position_dodge(width = 0.9), vjust = 1.5, size=4)+
+  theme_bw()+
+  theme(axis.text=element_text(size=11))+
+  theme(axis.title.x = element_blank())+
+  theme(axis.text.x=element_text(size=11))+
+  theme(axis.title.y=element_text(size=12, colour = "black",margin=(margin(0,10,0,0))))+
+  labs(y="Plant-soil feedback 
+       shoot")+
+  theme(legend.position= c(0.83,0.8))+
+  theme(legend.text = element_text(size = 10))+
+  theme(legend.key.size = unit(0.15, "in"))+  
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  coord_cartesian(ylim = c(-0.65, 1.35))+
+  theme(strip.text.x=element_text(size=11, face="bold"), strip.background=element_rect(fill="grey"))
+
+plotA
+
+#PSFR
+#Calculate mean and SE for plot
+PSFRplusmean <- ddply(PSFplus2, c("Species", "Nutrient", "Myc"), summarise,
+                      N    = length(PSFR),
+                      mean = mean(PSFR),
+                      sd   = sd(PSFR),
+                      se   = sd / sqrt(N)
+)
+
+PSFRplusmean
+
+#reorder nutrients
+PSFRplusmean$Nutrient <- factor(PSFRplusmean$Nutrient, levels = unique(rev(PSFRplusmean[,2])))
+
+#Add species as labels
+#Add species names
+PSFRplusmean$labels <- c("Leontodon", "Leontodon", "Leontodon", "Leontodon",
+                         "Plantago", "Plantago", "Plantago", "Plantago")
+PSFRplusmean$sig1 <- c("", "a", "a", "b", "", "a", "a", "")
+PSFRplusmean$sig2 <- c("c", "", "", "", "a", "", "", "a")
+
+#PSFR
+plotB <- ggplot(data = PSFRplusmean, aes(y = mean, x = Nutrient, fill = Myc)) + 
+  facet_wrap(~ labels) +
+  scale_fill_manual(values=c("#E69F00", "#0072B2"), name=element_blank()) +
+  geom_hline(yintercept=0)+
+  geom_bar(colour= "black",stat="identity", position=position_dodge()) +
+  geom_errorbar(data=PSFRplusmean, aes(ymin = mean-se, ymax = mean+se), width=.4,position=position_dodge(.9))+
+  geom_text(data=PSFRplusmean, aes(label = paste(sig1), y=mean+se), position = position_dodge(width = 0.9), vjust = -1, size=4)+
+  geom_text(data=PSFRplusmean, aes(label = paste(sig2), y=mean-se), position = position_dodge(width = 0.9), vjust = 1.5, size=4)+
+  theme_bw()+
+  theme(axis.text=element_text(size=11))+
+  theme(axis.title.x = element_blank())+
+  theme(axis.text.x=element_text(size=11))+
+  theme(axis.title.y=element_text(size=12, colour = "black",margin=(margin(0,10,0,0))))+
+  labs(y="Plant-soil feedback 
+       root")+
+  theme(legend.position= "none")+
+  theme(legend.text = element_text(size = 11))+
+  theme(legend.key.size = unit(0.4, "in"))+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  coord_cartesian(ylim = c(-0.65, 1.35))+
+  theme(strip.text.x=element_text(size=11, face="bold"), strip.background=element_rect(fill="grey"))
+
+plotB
+
+
+library(cowplot)
+plotPSF_myc <- plot_grid(plotA, plotB, labels=c("A", "B"), ncol=1)
+#save_plot("E:/Plant soil feedback/Students/Annelien/MS/Figures/Plant-soil feedback, nutrients and mychorrhizae.png", 
+          plotPSF_myc, ncol=1, base_aspect_ratio = 1.3, dpi = 600)
+
+
+
+#PSFT
+#Calculate mean and SE for plot
+PSFTplusmean <- ddply(PSFplus, c("Species", "Nutrient", "Myc"), summarise,
+                      N    = length(PSFT),
+                      mean = mean(PSFT),
+                      sd   = sd(PSFT),
+                      se   = sd / sqrt(N)
+)
+
+PSFTplusmean
+
+#reorder nutrients
+PSFTplusmean$Nutrient <- factor(PSFTplusmean$Nutrient, levels = unique(rev(PSFTplusmean[,2])))
+
+#PSFT
+plot <- ggplot(data = PSFTplusmean, aes(y = mean, x = Nutrient, fill = Myc)) + 
+  facet_wrap(~ Species) +
+  scale_fill_manual(values=c("#E69F00", "#0072B2"), name=element_blank()) +
+  geom_hline(yintercept=0)+
+  geom_bar(colour= "black",stat="identity", position=position_dodge()) +
+  geom_errorbar(data=PSFTplusmean, aes(ymin = mean-se, ymax = mean+se), width=.4,position=position_dodge(.9))+
+  theme_bw()+
+  theme(axis.text=element_text(size=25))+
+  theme(axis.title.x = element_blank())+
+  theme(axis.text.x=element_text(size=20))+
+  theme(axis.title.y=element_text(size=28, colour = "black",margin=(margin(0,10,0,0))))+
+  labs(y="Plant-soil feedback total")+
+  theme(legend.position= "none")+
+  theme(legend.text = element_text(size = 20))+
+  theme(legend.key.size = unit(0.4, "in"))+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  coord_cartesian(ylim = c(-0.48, 1.1))+
+  theme(strip.text.x=element_text(size=20, face="bold"), strip.background=element_rect(fill="grey"))
+
+plot
+
+####################################MYCORRHIZAE COUNTS#######################################################
+Dataplus2
+
+# Visualize
+p <- ggplot()
+p <- p + geom_boxplot(data = Dataplus, 
+                      aes(y = Relcol, 
+                          x = ID))                 
+p <- p + ylab("Relcol")
+p <- p + theme(text = element_text(size=15)) 
+p <- p + facet_wrap(~ Species, scales = "fixed")
+p
+#Quite some variation, especially for Lh
+
+# Visualize
+p <- ggplot()
+p <- p + geom_boxplot(data = Dataplus, 
+                      aes(y = Relcol, 
+                          x = Myc))                 
+p <- p + ylab("Relcol")
+p <- p + theme(text = element_text(size=15)) 
+p <- p + facet_wrap(~ Species, scales = "fixed")
+p
+#addition did not result in higher relative colonisation?
+
+# Visualize
+p <- ggplot()
+p <- p + geom_boxplot(data = Dataplus, 
+                      aes(y = Relcol, 
+                          x = Nutrient))                 
+p <- p + ylab("Relcol")
+p <- p + theme(text = element_text(size=15)) 
+p <- p + facet_wrap(~ Species, scales = "fixed")
+p
+#lower colonisation with low nutrients for Lh
+
+# Visualize
+p <- ggplot()
+p <- p + geom_boxplot(data = Dataplus, 
+                      aes(y = Relcol, 
+                          x = Soil))                 
+p <- p + ylab("Relcol")
+p <- p + theme(text = element_text(size=15)) 
+p <- p + facet_wrap(~ Species, scales = "fixed")
+p
+#higher colonisation on own soil for Pl?
+
+# Visualize
+p <- ggplot()
+p <- p + geom_point(data = Dataplus, 
+                      aes(y = Relcol, 
+                          x = Shoot, colour = Species)) 
+p <- p + ylab("Relcol")
+p <- p + theme(text = element_text(size=15)) 
+p
+#mmm positive for Lh?
+
+# Visualize
+p <- ggplot()
+p <- p + geom_point(data = Dataplus, 
+                    aes(y = Relcol, 
+                        x = Root, colour = Species)) 
+p <- p + ylab("Relcol")
+p <- p + theme(text = element_text(size=15)) 
+p
+#mmm positive for both?
+
+# Visualize
+p <- ggplot()
+p <- p + geom_point(data = Dataplus, 
+                    aes(y = Relcol, 
+                        x = Total, colour = Species)) 
+p <- p + ylab("Relcol")
+p <- p + theme(text = element_text(size=15)) 
+p
+#mmm positive for Lh?
+
+# Visualize
+p <- ggplot()
+p <- p + geom_boxplot(data = Dataplus, 
+                      aes(y = Relhyfe, 
+                          x = ID))                 
+p <- p + ylab("Relhyfe")
+p <- p + theme(text = element_text(size=15)) 
+p <- p + facet_wrap(~ Species, scales = "fixed")
+p
+#Quite some variation, especially for Lh
+
+# Visualize
+p <- ggplot()
+p <- p + geom_boxplot(data = Dataplus, 
+                      aes(y = Relvesicle, 
+                          x = ID))                 
+p <- p + ylab("Relvesicle")
+p <- p + theme(text = element_text(size=15)) 
+p <- p + facet_wrap(~ Species, scales = "fixed")
+p
+#Quite some variation, especially for Lh
+
+# Visualize
+p <- ggplot()
+p <- p + geom_boxplot(data = Dataplus, 
+                      aes(y = Relspore, 
+                          x = ID))                 
+p <- p + ylab("Relspore")
+p <- p + theme(text = element_text(size=15)) 
+p <- p + facet_wrap(~ Species, scales = "fixed")
+p
+#Quite some variation, especially for Lh
+
+#############################################STATS MYCORRHIZAE RELCOL#########################################
+Dataplus2
+
+library(car)
+
+#Relcol
+Dataplus3 <- Dataplus2[complete.cases(Dataplus2),]
+
+M0 <- lm (Relcol ~ Species * Soil * Nutrient * Myc, data=Dataplus2)
+
+summary(M0)
+Anova(M0, type=3)
+
+#Validation
+#model validation
+E0 <- resid(M0, type = "pearson")
+F0 <- fitted(M0)
+
+plot(M0)
+
+par(mfrow = c(2, 2))
+plot(x = F0, 
+     y = E0,
+     xlab = "Fitted values",
+     ylab = "Residuals",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+lines(loess.smooth(F0, E0), col="red")
+#trouble, heterogeneity
+#more variation with higher fitted values
+#no negative valuess
+
+#plot per covariate
+plot(x = Dataplus2$Species, 
+     y = E0,
+     xlab = "Species",
+     ylab = "Residuals",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+#higher variation for Lh
+
+plot(x = Dataplus2$Nutrient, 
+     y = E0,
+     xlab = "Nutrient",
+     ylab = "E0",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+#ok
+
+plot(x = Dataplus2$Soil, 
+     y = E0,
+     xlab = "Soil",
+     ylab = "E0",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+#ok
+
+plot(x = Dataplus2$Myc, 
+     y = E0,
+     xlab = "Myc",
+     ylab = "E0",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+#ok
+
+#not enough statistical power to add weights function, so do per species
+#subset per species
+Lhplus <- Dataplus3[ which(Dataplus3$Species=="Lh"),]
+Plplus <- Dataplus3[ which(Dataplus3$Species=="Pl"),]
+
+#Lh
+M1 <- lm (Relcol ~ Soil * Nutrient * Myc, data=Lhplus)
+
+summary(M1)
+Anova(M1, type=3)
+
+#Validation
+#model validation
+E1 <- resid(M1, type = "pearson")
+F1 <- fitted(M1)
+
+par(mfrow = c(2, 2))
+plot(x = F1, 
+     y = E1,
+     xlab = "Fitted values",
+     ylab = "Residuals",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+lines(loess.smooth(F1, E1), col="red")
+#trouble, heterogeneity
+#more variation with higher fitted values
+#no negative valuess
+
+#plot per covariate
+plot(x = Lhplus$Nutrient, 
+     y = E1,
+     xlab = "Nutrient",
+     ylab = "E1",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+#more variation with high nutrients
+
+plot(x = Lhplus$Soil, 
+     y = E1,
+     xlab = "Soil",
+     ylab = "E1",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+#ok
+
+plot(x = Lhplus$Myc, 
+     y = E1,
+     xlab = "Myc",
+     ylab = "E1",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+#more variation without mycorhizae
+
+#model with varIdent
+library(nlme)
+
+vf1 <- varIdent(form = ~ 1|Nutrient)
+
+M2 <- gls(Relcol ~ Soil * Nutrient * Myc,
+          data = Lhplus, weights = vf1)
+
+summary(M2) 
+Anova(M2, type=3)
+
+E2 <- resid(M2, type = "pearson")
+F2 <- fitted(M2)
+
+par(mfrow = c(2, 2))
+plot(x = F2, 
+     y = E2,
+     xlab = "Fitted values",
+     ylab = "Residuals",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+lines(loess.smooth(F2, E2), col="red")
+#good
+
+qqnorm(E2)
+#alright
+
+plot(x = Lhplus$Nutrient, 
+     y = E2,
+     xlab = "Nutrient",
+     ylab = "Residuals",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+#alright
+
+plot(x = Lhplus$Myc, 
+     y = E2,
+     xlab = "Myc",
+     ylab = "Residuals",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+#Better
+
+plot(x = Lhplus$Soil, 
+     y = E2,
+     xlab = "Soil",
+     ylab = "Residuals",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+#better
+
+#Posthoc
+emmeans(M2, pairwise ~ Soil * Myc | Nutrient)
+
+
+#Pl
+M2 <- lm (Relcol ~ Soil * Nutrient * Myc, data=Plplus)
+
+summary(M2)
+Anova(M2, type=3)
+
+#Validation
+#model validation
+E2 <- resid(M2, type = "pearson")
+F2 <- fitted(M2)
+
+par(mfrow = c(2, 2))
+plot(x = F2, 
+     y = E2,
+     xlab = "Fitted values",
+     ylab = "Residuals",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+lines(loess.smooth(F2, E2), col="red")
+#alright
+#no negative valuess
+
+#plot per covariate
+plot(x = Plplus$Nutrient, 
+     y = E2,
+     xlab = "Nutrient",
+     ylab = "E2",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+#more variation with low nutrients
+
+plot(x = Plplus$Soil, 
+     y = E2,
+     xlab = "Soil",
+     ylab = "E2",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+#more variation in mix soil
+
+plot(x = Plplus$Myc, 
+     y = E2,
+     xlab = "Myc",
+     ylab = "E2",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+#alright
+
+#model with varIdent
+library(nlme)
+
+vf1 <- varIdent(form = ~ 1|Nutrient)
+
+M3 <- gls(Relcol ~ Soil * Nutrient * Myc,
+          data = Plplus, weights = vf1)
+
+summary(M3) 
+Anova(M3, type=3)
+
+E3 <- resid(M3, type = "pearson")
+F3 <- fitted(M3)
+
+par(mfrow = c(2, 2))
+plot(x = F3, 
+     y = E3,
+     xlab = "Fitted values",
+     ylab = "Residuals",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+lines(loess.smooth(F3, E3), col="red")
+#better
+
+qqnorm(E3)
+#alright
+
+plot(x = Plplus$Nutrient, 
+     y = E3,
+     xlab = "Nutrient",
+     ylab = "Residuals",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+#alright
+
+plot(x = Plplus$Myc, 
+     y = E3,
+     xlab = "Myc",
+     ylab = "Residuals",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+#mmm not great
+
+plot(x = Plplus$Soil, 
+     y = E3,
+     xlab = "Soil",
+     ylab = "Residuals",
+     cex.lab = 1.5)
+abline(v = 0, lwd = 2, col = 2)
+abline(h = 0, lty = 2, col = 1)
+#better
+
+#Posthoc
+emmeans(M3, pairwise ~ Soil * Myc | Nutrient)
+
+
+#########################################################PLOTS MYCCHORZAE COUNTS#######################################
+Dataplus2
+Dataplus2$Relvesicleandspore <- Dataplus2$Relvesicle+Dataplus2$Relspore
+
+library(plyr)
+
+#Calculate mean and SE for plot
+Relcolmean <- ddply(Dataplus2, c("Species", "Nutrient", "Soil", "Myc"), summarise,
+                      N    = sum(!is.na(Relcol)),
+                      mean = mean(Relcol, na.rm=TRUE),
+                      sd   = sd(Relcol, na.rm=TRUE),
+                      se   = sd / sqrt(N)
+)
+
+Relcolmean
+Relcolmean$ID <- paste(Relcolmean$Nutrient, Relcolmean$Soil)
+Relcolmean$ID2 <- paste(Relcolmean$Species, Relcolmean$Nutrient)
+
+#reorder nutrients
+Relcolmean$Soil <- factor(Relcolmean$Soil, levels = unique(rev(Relcolmean[,3])))
+Relcolmean$Nutrient <- factor(Relcolmean$Nutrient, levels = unique(rev(Relcolmean[,2])))
+#Relcolmean$ID2 <- factor(Relcolmean$ID2, levels = unique(rev(Relcolmean$ID2)))
+#reorder nutrients
+
+#Add species as labels
+#Add species names
+Relcolmean$labels <- c("Leontodon - high", "Leontodon - high", "Leontodon - high", "Leontodon - high",
+                          "Leontodon - low", "Leontodon - low", "Leontodon - low", "Leontodon - low",
+                          "Plantago - high", "Plantago - high", "Plantago - high", "Plantago - high", 
+                          "Plantago - low", "Plantago - low", "Plantago - low", "Plantago - low")
+Relcolmean$labels <- factor(Relcolmean$labels, levels = c("Leontodon - low", "Leontodon - high", "Plantago - low", "Plantago - high"))
+Relcolmean$sig <- c("a", "a", "a", "a", "a", "a", "a", "a", "c", "a", "a", "b", "a", "a", "a", "a")
+
+
+#Relcol
+plot <- ggplot(data = Relcolmean, aes(y = mean, x = Soil, fill = Myc)) + 
+  facet_wrap(~ labels) +
+  scale_fill_manual(values=c("#E69F00", "#0072B2"), name=element_blank(), breaks=c("Min", "Plus"),
+                    labels=c("No AMF added", "AMF added")) +
+  geom_bar(colour= "black",stat="identity", position=position_dodge()) +
+  geom_errorbar(data=Relcolmean, aes(ymin = mean-se, ymax = mean+se), width=.4,position=position_dodge(.9))+
+  geom_text(data=Relcolmean, aes(label = paste(sig), y=mean+se), position = position_dodge(width = 0.9), vjust = -1, size=4)+
+  theme_bw()+
+  theme(axis.text=element_text(size=11))+
+  theme(axis.title.x = element_blank())+
+  theme(axis.text.x=element_text(size=11))+
+  theme(axis.title.y=element_text(size=12, colour = "black",margin=(margin(0,10,0,0))))+
+  labs(y="Relative colonisation (%)")+
+  theme(legend.position= c(0.35,0.915))+
+  theme(legend.text = element_text(size = 10))+
+  theme(legend.key.size = unit(0.15, "in"))+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  coord_cartesian(ylim = c(0, 78))+
+  theme(strip.text.x=element_text(size=10, face="bold"), strip.background=element_rect(fill="grey"))
+
+plot
+
+library(cowplot)
+#save_plot("E:/Plant soil feedback/Students/Annelien/MS/Figures/Relative colonisation_total.png", 
+          plot, ncol=1, base_aspect_ratio = 1.3, dpi = 600)
+
+
+#Relhyfe
+#Calculate mean and SE for plot
+Relhyfemean <- ddply(Dataplus2, c("Species", "Nutrient", "Soil", "Myc"), summarise,
+                    N    = sum(!is.na(Relhyfe)),
+                    mean = mean(Relhyfe, na.rm=TRUE),
+                    sd   = sd(Relhyfe, na.rm=TRUE),
+                    se   = sd / sqrt(N)
+)
+
+Relhyfemean
+Relhyfemean$ID <- paste(Relhyfemean$Nutrient, Relhyfemean$Soil)
+
+#reorder nutrients
+Relhyfemean$Soil <- factor(Relhyfemean$Soil, levels = unique(rev(Relhyfemean[,3])))
+Relhyfemean$Nutrient <- factor(Relhyfemean$Nutrient, levels = unique(rev(Relhyfemean[,2])))
+Relhyfemean$labels <- c("Leontodon - high", "Leontodon - high", "Leontodon - high", "Leontodon - high",
+                       "Leontodon - low", "Leontodon - low", "Leontodon - low", "Leontodon - low",
+                       "Plantago - high", "Plantago - high", "Plantago - high", "Plantago - high", 
+                       "Plantago - low", "Plantago - low", "Plantago - low", "Plantago - low")
+Relhyfemean$labels <- factor(Relhyfemean$labels, levels = c("Leontodon - low", "Leontodon - high", "Plantago - low", "Plantago - high"))
+
+#Relhyfe
+plotA <- ggplot(data = Relhyfemean, aes(y = mean, x = Soil, fill = Myc)) + 
+  facet_wrap(~ labels, ncol=4) +
+  scale_fill_manual(values=c("#E69F00", "#0072B2"), name=element_blank()) +
+  geom_bar(colour= "black",stat="identity", position=position_dodge()) +
+  geom_errorbar(data=Relhyfemean, aes(ymin = mean-se, ymax = mean+se), width=.4,position=position_dodge(.9))+
+  theme_bw()+
+  theme(axis.text=element_text(size=11))+
+  theme(axis.title.x = element_blank())+
+  theme(axis.text.x=element_text(size=11))+
+  theme(axis.title.y=element_text(size=12, colour = "black",margin=(margin(0,10,0,0))))+
+  labs(y="Relative colonisation hyfe (%)")+
+  theme(legend.position= "none")+
+  theme(legend.text = element_text(size = 10))+
+  theme(legend.key.size = unit(0.4, "in"))+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  coord_cartesian(ylim = c(0, 80))+
+  theme(strip.text.x=element_text(size=10, face="bold"), strip.background=element_rect(fill="grey"))
+
+plotA
+
+
+#Relvesicle
+#Calculate mean and SE for plot
+Relvesiclemean <- ddply(Dataplus2, c("Species", "Nutrient", "Soil", "Myc"), summarise,
+                     N    = sum(!is.na(Relvesicle)),
+                     mean = mean(Relvesicle, na.rm=TRUE),
+                     sd   = sd(Relvesicle, na.rm=TRUE),
+                     se   = sd / sqrt(N)
+)
+
+Relvesiclemean
+Relvesiclemean$ID <- paste(Relvesiclemean$Nutrient, Relvesiclemean$Soil)
+
+#reorder nutrients
+Relvesiclemean$Soil <- factor(Relvesiclemean$Soil, levels = unique(rev(Relvesiclemean[,3])))
+Relvesiclemean$Nutrient <- factor(Relvesiclemean$Nutrient, levels = unique(rev(Relvesiclemean[,2])))
+Relvesiclemean$labels <- c("Leontodon - high", "Leontodon - high", "Leontodon - high", "Leontodon - high",
+                        "Leontodon - low", "Leontodon - low", "Leontodon - low", "Leontodon - low",
+                        "Plantago - high", "Plantago - high", "Plantago - high", "Plantago - high", 
+                        "Plantago - low", "Plantago - low", "Plantago - low", "Plantago - low")
+Relvesiclemean$labels <- factor(Relvesiclemean$labels, levels = c("Leontodon - low", "Leontodon - high", "Plantago - low", "Plantago - high"))
+
+#Relvesicle
+plot <- ggplot(data = Relvesiclemean, aes(y = mean, x = Soil, fill = Myc)) + 
+  facet_wrap(~ labels) +
+  scale_fill_manual(values=c("#E69F00", "#0072B2"), name=element_blank()) +
+  geom_bar(colour= "black",stat="identity", position=position_dodge()) +
+  geom_errorbar(data=Relvesiclemean, aes(ymin = mean-se, ymax = mean+se), width=.4,position=position_dodge(.9))+
+  theme_bw()+
+  theme(axis.text=element_text(size=11))+
+  theme(axis.title.x = element_blank())+
+  theme(axis.text.x=element_text(size=11))+
+  theme(axis.title.y=element_text(size=12, colour = "black",margin=(margin(0,10,0,0))))+
+  labs(y="Relative colonisation vesicle (%)")+
+  theme(legend.position= "none")+
+  theme(legend.text = element_text(size = 10))+
+  theme(legend.key.size = unit(0.4, "in"))+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  coord_cartesian(ylim = c(0, 80))+
+  theme(strip.text.x=element_text(size=10, face="bold"), strip.background=element_rect(fill="grey"))
+
+plot
+
+#save_plot("E:/Plant soil feedback/Students/Annelien/MS/Figures/Relative colonisation_vesicle.png", 
+          plot, ncol=1, base_aspect_ratio = 1.3, dpi = 600)
+
+
+#Relspore
+#Calculate mean and SE for plot
+Relsporemean <- ddply(Dataplus2, c("Species", "Nutrient", "Soil", "Myc"), summarise,
+                        N    = sum(!is.na(Relspore)),
+                        mean = mean(Relspore, na.rm=TRUE),
+                        sd   = sd(Relspore, na.rm=TRUE),
+                        se   = sd / sqrt(N)
+)
+
+Relsporemean
+Relsporemean$ID <- paste(Relsporemean$Nutrient, Relsporemean$Soil)
+
+#reorder nutrients
+Relsporemean$Soil <- factor(Relsporemean$Soil, levels = unique(rev(Relsporemean[,3])))
+Relsporemean$Nutrient <- factor(Relsporemean$Nutrient, levels = unique(rev(Relsporemean[,2])))
+Relsporemean$labels <- c("Leontodon - high", "Leontodon - high", "Leontodon - high", "Leontodon - high",
+                           "Leontodon - low", "Leontodon - low", "Leontodon - low", "Leontodon - low",
+                           "Plantago - high", "Plantago - high", "Plantago - high", "Plantago - high", 
+                           "Plantago - low", "Plantago - low", "Plantago - low", "Plantago - low")
+Relsporemean$labels <- factor(Relsporemean$labels, levels = c("Leontodon - low", "Leontodon - high", "Plantago - low", "Plantago - high"))
+
+#Relspore
+plot <- ggplot(data = Relsporemean, aes(y = mean, x = Soil, fill = Myc)) + 
+  facet_wrap(~ labels) +
+  scale_fill_manual(values=c("#E69F00", "#0072B2"), name=element_blank()) +
+  geom_bar(colour= "black",stat="identity", position=position_dodge()) +
+  geom_errorbar(data=Relsporemean, aes(ymin = mean-se, ymax = mean+se), width=.4,position=position_dodge(.9))+
+  theme_bw()+
+  theme(axis.text=element_text(size=11))+
+  theme(axis.title.x = element_blank())+
+  theme(axis.text.x=element_text(size=11))+
+  theme(axis.title.y=element_text(size=12, colour = "black",margin=(margin(0,10,0,0))))+
+  labs(y="Relative colonisation spore (%)")+
+  theme(legend.position= "none")+
+  theme(legend.text = element_text(size = 10))+
+  theme(legend.key.size = unit(0.4, "in"))+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  coord_cartesian(ylim = c(0, 80))+
+  theme(strip.text.x=element_text(size=10, face="bold"), strip.background=element_rect(fill="grey"))
+
+plot
+
+save_plot("E:/Plant soil feedback/Students/Annelien/MS/Figures/Relative colonisation_spore.png", 
+          plot, ncol=1, base_aspect_ratio = 1.3, dpi = 600)
+
+
+#Relvesicleandspore
+#Calculate mean and SE for plot
+Relvesicleandsporemean <- ddply(Dataplus2, c("Species", "Nutrient", "Soil", "Myc"), summarise,
+                      N    = sum(!is.na(Relvesicleandspore)),
+                      mean = mean(Relvesicleandspore, na.rm=TRUE),
+                      sd   = sd(Relvesicleandspore, na.rm=TRUE),
+                      se   = sd / sqrt(N)
+)
+
+Relvesicleandsporemean
+Relvesicleandsporemean$ID <- paste(Relvesicleandsporemean$Nutrient, Relvesicleandsporemean$Soil)
+
+#reorder nutrients
+Relvesicleandsporemean$Soil <- factor(Relvesicleandsporemean$Soil, levels = unique(rev(Relvesicleandsporemean[,3])))
+Relvesicleandsporemean$Nutrient <- factor(Relvesicleandsporemean$Nutrient, levels = unique(rev(Relvesicleandsporemean[,2])))
+Relvesicleandsporemean$labels <- c("Leontodon - high", "Leontodon - high", "Leontodon - high", "Leontodon - high",
+                         "Leontodon - low", "Leontodon - low", "Leontodon - low", "Leontodon - low",
+                         "Plantago - high", "Plantago - high", "Plantago - high", "Plantago - high", 
+                         "Plantago - low", "Plantago - low", "Plantago - low", "Plantago - low")
+Relvesicleandsporemean$labels <- factor(Relvesicleandsporemean$labels, levels = c("Leontodon - low", "Leontodon - high", "Plantago - low", "Plantago - high"))
+
+#Relvesicleandspore
+plotB <- ggplot(data = Relvesicleandsporemean, aes(y = mean, x = Soil, fill = Myc)) + 
+  facet_wrap(~ labels, ncol=4) +
+  scale_fill_manual(values=c("#E69F00", "#0072B2"), name=element_blank()) +
+  geom_bar(colour= "black",stat="identity", position=position_dodge()) +
+  geom_errorbar(data=Relvesicleandsporemean, aes(ymin = mean-se, ymax = mean+se), width=.4,position=position_dodge(.9))+
+  theme_bw()+
+  theme(axis.text=element_text(size=11))+
+  theme(axis.title.x = element_blank())+
+  theme(axis.text.x=element_text(size=11))+
+  theme(axis.title.y=element_text(size=12, colour = "black",margin=(margin(0,10,0,0))))+
+  labs(y="Relative colonisation vesicles (%)")+
+  theme(legend.position= "none")+
+  theme(legend.text = element_text(size = 10))+
+  theme(legend.key.size = unit(0.4, "in"))+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  coord_cartesian(ylim = c(0, 80))+
+  theme(strip.text.x=element_text(size=10, face="bold"), strip.background=element_rect(fill="grey"))
+
+plotB
+
+
+#Plot with hyfe and vesciel plus spores
+plothyfevesiclespore <- plot_grid(plotA, plotB, labels=c("A", "B"), ncol=1)
+plothyfevesiclespore
+
+#save_plot("E:/Plant soil feedback/Students/Annelien/MS/Figures/Relative colonisation_hyfevesiclespore.png", 
+          plothyfevesiclespore, ncol=1, base_aspect_ratio = 1.3, dpi = 600)
