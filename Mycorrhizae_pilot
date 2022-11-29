@@ -1,0 +1,294 @@
+rm(list=ls())
+setwd("E:/Plant soil feedback/Students/Annelien/R")
+
+library(reshape2)
+library("QuantPsyc")
+library(ggplot2)
+library(lattice)
+library(plyr)
+source("C:/Users/dzandt/Documents/Courses/Zero Inflated models/AllRCode/HighstatLibV10.R") #pc
+source("C:/Users/Dina/Desktop/Zero Inflated models/AllData/HighstatLibV10.R") #laptop
+
+Data=read.table("Mycorrhizae_pilot.txt",h=T)
+
+head(Data)
+
+#Shoot and root is for two plants together, divide by 2
+Data$Shoot2 <- Data$Shoot/2
+Data$Root2 <- Data$Root/2
+
+#Calculate root:shoot ratio
+Data$Ratio<-Data$Root/Data$Shoot
+
+#Calculate total biomass
+Data$Total<-Data$Shoot2 + Data$Root2
+
+#Data exploration
+# A. Missing values
+# B. Outliers
+# C. Collinearity
+# D. Relationships
+# E. Zero inflation
+
+# A. Missing values?
+colSums(is.na(Data)) #All correct
+
+# B. Outliers
+MyVar <- c("Root2", "Shoot2", "Total", "Ratio")      
+Mydotplot(Data[, MyVar]) # Perhaps a root outlier
+
+#####################################################PLOTS############################################
+head(Data)
+
+Data$fAddition <- as.factor(Data$Addition)
+
+#Calculate mean and SE for plot
+Shootmean <- ddply(Data, c("Species", "fAddition"), summarise,
+                   N    = sum(!is.na(Shoot2)),
+                   mean = mean(Shoot2, na.rm=TRUE),
+                   sd   = sd(Shoot2, na.rm=TRUE),
+                   se   = sd / sqrt(N)
+)
+
+Shootmean
+
+#Add post hoc letters
+Shootmean$sig <- c("b", "a", "b", "a", "b", "a", "b", "a", "b", "c", "b", "a", "b", "c", "b", "a")
+
+#Shoot
+plotA <- ggplot(data = Shootmean, aes(y = Shootmean$mean, x = Shootmean$fAddition)) + 
+  facet_wrap(~ Species, ncol=4) +
+  #scale_fill_manual(values=c("#E69F00", "#D55E00", "#0072B2", "#009E73" ), name=element_blank(), breaks = c("low", "high"), labels = c("low nutrients", "high nutrients")) +
+  geom_bar(colour= "black",stat="identity", position=position_dodge()) +
+  #geom_line(aes(colour=Shootmean$Species), size=1.5)+
+  geom_errorbar(data=Shootmean, aes(ymin = mean-se, ymax = mean+se), width=.4,position=position_dodge(.9))+
+  #geom_text(data=Shootmean, aes(label = paste(sig), y=mean+se), position = position_dodge(width = 0.9), vjust = -1, size=4)+
+  theme_bw()+
+  theme(axis.text=element_text(size=11))+
+  theme(axis.title.x = element_blank())+
+  theme(axis.text.x=element_text(size=11))+
+  theme(axis.title.y=element_text(size=12, colour = "black",margin=(margin(0,10,0,0))))+
+  labs(y="Dry weight shoot (g)")+
+  #coord_cartesian(ylim=c(0, 2.3)) +
+  theme(legend.position= c(0.12,0.85))+
+  theme(legend.text = element_text(size = 10))+
+  theme(legend.key.size = unit(0.15, "in"))+  
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  theme(legend.background = element_blank())+
+  theme(strip.text.x=element_text(size=11, face="bold"), strip.background=element_rect(fill="grey"))
+
+plotA
+
+#Calculate mean and SE for plot
+Rootmean <- ddply(Data, c("Species", "fAddition"), summarise,
+                   N    = sum(!is.na(Root2)),
+                   mean = mean(Root2, na.rm=TRUE),
+                   sd   = sd(Root2, na.rm=TRUE),
+                   se   = sd / sqrt(N)
+)
+
+Rootmean
+
+#Add post hoc letters
+Rootmean$sig <- c("b", "a", "b", "a", "b", "a", "b", "a", "b", "c", "b", "a", "b", "c", "b", "a")
+
+#Root
+plotB <- ggplot(data = Rootmean, aes(y = Rootmean$mean, x = Rootmean$fAddition)) + 
+  facet_wrap(~ Species, ncol=4) +
+  #scale_fill_manual(values=c("#E69F00", "#D55E00", "#0072B2", "#009E73" ), name=element_blank(), breaks = c("low", "high"), labels = c("low nutrients", "high nutrients")) +
+  geom_bar(colour= "black",stat="identity", position=position_dodge()) +
+  #geom_line(aes(colour=Rootmean$Species), size=1.5)+
+  geom_errorbar(data=Rootmean, aes(ymin = mean-se, ymax = mean+se), width=.4,position=position_dodge(.9))+
+  #geom_text(data=Rootmean, aes(label = paste(sig), y=mean+se), position = position_dodge(width = 0.9), vjust = -1, size=4)+
+  theme_bw()+
+  theme(axis.text=element_text(size=11))+
+  theme(axis.title.x = element_blank())+
+  theme(axis.text.x=element_text(size=11))+
+  theme(axis.title.y=element_text(size=12, colour = "black",margin=(margin(0,10,0,0))))+
+  labs(y="Dry weight Root (g)")+
+  #coord_cartesian(ylim=c(0, 2.3)) +
+  theme(legend.position= c(0.12,0.85))+
+  theme(legend.text = element_text(size = 10))+
+  theme(legend.key.size = unit(0.15, "in"))+  
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  theme(legend.background = element_blank())+
+  theme(strip.text.x=element_text(size=11, face="bold"), strip.background=element_rect(fill="grey"))
+
+plotB
+
+
+#Calculate mean and SE for plot
+Totalmean <- ddply(Data, c("Species", "fAddition"), summarise,
+                  N    = sum(!is.na(Total)),
+                  mean = mean(Total, na.rm=TRUE),
+                  sd   = sd(Total, na.rm=TRUE),
+                  se   = sd / sqrt(N)
+)
+
+Totalmean
+
+#Add post hoc letters
+Totalmean$sig <- c("b", "a", "b", "a", "b", "a", "b", "a", "b", "c", "b", "a", "b", "c", "b", "a")
+
+#Total
+plotC <- ggplot(data = Totalmean, aes(y = Totalmean$mean, x = Totalmean$fAddition)) + 
+  facet_wrap(~ Species, ncol=4) +
+  #scale_fill_manual(values=c("#E69F00", "#D55E00", "#0072B2", "#009E73" ), name=element_blank(), breaks = c("low", "high"), labels = c("low nutrients", "high nutrients")) +
+  geom_bar(colour= "black",stat="identity", position=position_dodge()) +
+  #geom_line(aes(colour=Totalmean$Species), size=1.5)+
+  geom_errorbar(data=Totalmean, aes(ymin = mean-se, ymax = mean+se), width=.4,position=position_dodge(.9))+
+  #geom_text(data=Totalmean, aes(label = paste(sig), y=mean+se), position = position_dodge(width = 0.9), vjust = -1, size=4)+
+  theme_bw()+
+  theme(axis.text=element_text(size=11))+
+  theme(axis.title.x = element_blank())+
+  theme(axis.text.x=element_text(size=11))+
+  theme(axis.title.y=element_text(size=12, colour = "black",margin=(margin(0,10,0,0))))+
+  labs(y="Dry weight Total (g)")+
+  #coord_cartesian(ylim=c(0, 2.3)) +
+  theme(legend.position= c(0.12,0.85))+
+  theme(legend.text = element_text(size = 10))+
+  theme(legend.key.size = unit(0.15, "in"))+  
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  theme(legend.background = element_blank())+
+  theme(strip.text.x=element_text(size=11, face="bold"), strip.background=element_rect(fill="grey"))
+
+plotC
+
+
+#Calculate mean and SE for plot
+Ratiomean <- ddply(Data, c("Species", "fAddition"), summarise,
+                   N    = sum(!is.na(Ratio)),
+                   mean = mean(Ratio, na.rm=TRUE),
+                   sd   = sd(Ratio, na.rm=TRUE),
+                   se   = sd / sqrt(N)
+)
+
+Ratiomean
+
+#Add post hoc letters
+Ratiomean$sig <- c("b", "a", "b", "a", "b", "a", "b", "a", "b", "c", "b", "a", "b", "c", "b", "a")
+
+#Ratio
+plotD <- ggplot(data = Ratiomean, aes(y = Ratiomean$mean, x = Ratiomean$fAddition)) + 
+  facet_wrap(~ Species, ncol=4) +
+  #scale_fill_manual(values=c("#E69F00", "#D55E00", "#0072B2", "#009E73" ), name=element_blank(), breaks = c("low", "high"), labels = c("low nutrients", "high nutrients")) +
+  geom_bar(colour= "black",stat="identity", position=position_dodge()) +
+  #geom_line(aes(colour=Ratiomean$Species), size=1.5)+
+  geom_errorbar(data=Ratiomean, aes(ymin = mean-se, ymax = mean+se), width=.4,position=position_dodge(.9))+
+  #geom_text(data=Ratiomean, aes(label = paste(sig), y=mean+se), position = position_dodge(width = 0.9), vjust = -1, size=4)+
+  theme_bw()+
+  theme(axis.text=element_text(size=11))+
+  theme(axis.title.x = element_blank())+
+  theme(axis.text.x=element_text(size=11))+
+  theme(axis.title.y=element_text(size=12, colour = "black",margin=(margin(0,10,0,0))))+
+  labs(y="Root:shoot ratio")+
+  #coord_cartesian(ylim=c(0, 2.3)) +
+  theme(legend.position= c(0.12,0.85))+
+  theme(legend.text = element_text(size = 10))+
+  theme(legend.key.size = unit(0.15, "in"))+  
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  theme(legend.background = element_blank())+
+  theme(strip.text.x=element_text(size=11, face="bold"), strip.background=element_rect(fill="grey"))
+
+plotD
+
+
+#calculate relative colonisation
+Data$Relcol <- ((Data$hyfe+Data$vesicle+Data$arbuscule+Data$spore)/Data$nocol)*100
+
+#Calculate mean and SE for plot
+Relcolmean <- ddply(Data, c("Species", "fAddition"), summarise,
+                   N    = sum(!is.na(Relcol)),
+                   mean = mean(Relcol, na.rm=TRUE),
+                   sd   = sd(Relcol, na.rm=TRUE),
+                   se   = sd / sqrt(N)
+)
+
+Relcolmean
+
+#Add species as labels
+Relcolmean$sig <- c("b", "a", "b", "a", "b", "a", "b", "a", "b", "c", "b", "a", "b", "c", "b", "a")
+
+#Relcol
+plotE <- ggplot(data = Relcolmean, aes(y = Relcolmean$mean, x = Relcolmean$fAddition)) + 
+  facet_wrap(~ Species, ncol=4) +
+  #scale_fill_manual(values=c("#E69F00", "#D55E00", "#0072B2", "#009E73" ), name=element_blank(), breaks = c("low", "high"), labels = c("low nutrients", "high nutrients")) +
+  geom_bar(colour= "black",stat="identity", position=position_dodge()) +
+  #geom_line(aes(colour=Relcolmean$Species), size=1.5)+
+  geom_errorbar(data=Relcolmean, aes(ymin = mean-se, ymax = mean+se), width=.4,position=position_dodge(.9))+
+  #geom_text(data=Relcolmean, aes(label = paste(sig), y=mean+se), position = position_dodge(width = 0.9), vjust = -1, size=4)+
+  theme_bw()+
+  theme(axis.text=element_text(size=11))+
+  theme(axis.title.x = element_blank())+
+  theme(axis.text.x=element_text(size=11))+
+  theme(axis.title.y=element_text(size=12, colour = "black",margin=(margin(0,10,0,0))))+
+  labs(y="Relcol")+
+  #coord_cartesian(ylim=c(0, 2.3)) +
+  theme(legend.position= c(0.12,0.85))+
+  theme(legend.text = element_text(size = 10))+
+  theme(legend.key.size = unit(0.15, "in"))+  
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  theme(legend.background = element_blank())+
+  theme(strip.text.x=element_text(size=11, face="bold"), strip.background=element_rect(fill="grey"))
+
+plotE
+
+##########################################STATS AND FIG FOR COLONISATION INCREASE SUPPLEMENTS##########################################
+library(car)
+library(nlme)
+library(emmeans)
+
+suball <- Data[which(Data$fAddition=="0" | Data$fAddition=="1000"),]
+suball
+
+#Stats
+vf <- varIdent(form = ~ 1|Species)
+model <- gls(Relcol ~ fAddition * Species, data=suball, weights=vf)
+qqnorm(resid(model))
+plot(model) #ok...
+emmeans(model, pairwise ~ fAddition | Species)
+
+#sub for figure
+sub<-Relcolmean[which(Relcolmean$fAddition=="0" | Relcolmean$fAddition=="1000"),]
+sub
+
+#Text x-axis
+sub$xaxis <- c("no AMF added", "AMF added", "no AMF added", "AMF added","no AMF added", "AMF added","no AMF added", "AMF added")
+sub$xaxis <- factor(sub$xaxis, levels = c("no AMF added", "AMF added"))
+
+
+#Add species as labels
+sub$sig1 <- c(" ns", "", " ns", "", "", "", "", "")
+sub$sig2 <- c("", "", "", "", "  *", "", "***", "")
+
+#Relcol
+plot <- ggplot(data = sub, aes(y = sub$mean, x = sub$xaxis, fill=sub$xaxis)) + 
+  facet_wrap(~ Species, ncol=2) +
+  geom_bar(colour= "black",stat="identity", position=position_dodge()) +
+  scale_fill_manual(values=c("#E69F00", "#0072B2"), name=element_blank(), breaks=c("no AMF added", "AMF added")) +
+  #geom_line(aes(colour=Relcolmean$Species), size=1.5)+
+  geom_errorbar(data=sub, aes(ymin = mean-se, ymax = mean+se), width=.4,position=position_dodge(.9))+
+  geom_text(data=sub, aes(label = paste(sig1), y=c(15, 0.26, 30, 0.20, 0.75, 0.75, 35, -0.50)), position = position_dodge(width = 0.9), hjust = -2.5, size=3.5)+
+  geom_text(data=sub, aes(label = paste(sig2), y=c(0.26, 0.26, 0.20, 0.20, 80, 0.73, 40, -0.50)), position = position_dodge(width = 0.9), hjust = -2, size=5)+
+  #geom_text(data=sub, aes(label = paste(sig), y=mean+se), position = position_dodge(width = 0.9), vjust = -1, size=4)+
+  theme_bw()+
+  theme(axis.text=element_text(size=11))+
+  theme(axis.title.x = element_blank())+
+  theme(axis.text.x=element_text(size=11))+
+  theme(axis.title.y=element_text(size=12, colour = "black",margin=(margin(0,10,0,0))))+
+  labs(y="Relative colonisation (%)")+
+  #coord_cartesian(ylim=c(0, 2.3)) +
+  theme(legend.position= "none")+
+  theme(legend.text = element_text(size = 10))+
+  theme(legend.key.size = unit(0.15, "in"))+  
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  theme(legend.background = element_blank())+
+  theme(strip.text.x=element_text(size=11, face="bold"), strip.background=element_rect(fill="grey"))
+
+plot
+
+library(cowplot)
+plotmycpilot <- plot_grid(plot, ncol=1)
+
+#save_plot("E:/Plant soil feedback/Students/Annelien/MS/Figures/Pilot myccorhizae.png", 
+          plotmycpilot, ncol=1, base_aspect_ratio = 1.5, dpi = 600)
